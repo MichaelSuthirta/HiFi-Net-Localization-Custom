@@ -19,8 +19,8 @@ def evaluate_and_visualize():
 
     # 1. Dataset & DataLoader (We use the same sample folders for demo purposes)
     dataset = ForgeryDataset(
-        fake_dir='data/images',
-        mask_dir='data/masks'
+        fake_dir='data-CASIA1/fake',
+        mask_dir='data-CASIA1/mask'
     )
     dataloader = DataLoader(dataset, batch_size=1, shuffle=False)
 
@@ -55,7 +55,7 @@ def evaluate_and_visualize():
             mask_feat, mask_binary, cls_4, cls_3, cls_2, cls_1 = SegNet(features, images)
             
             # mask_binary is [B, 256, 256] from sigmoid layer. Threshold it > 0.5
-            pred_mask = (mask_binary > 0.5).float()
+            pred_mask = (mask_binary > 0.2).float()
 
             # Move to CPU for visualization
             img_disp = images[0].cpu().permute(1, 2, 0).numpy()

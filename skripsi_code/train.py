@@ -25,8 +25,8 @@ def train():
 
     # 1. Dataset & DataLoader
     dataset = ForgeryDataset(
-        fake_dir='data/images',
-        mask_dir='data/masks'
+        fake_dir='data-CASIA1/fake',
+        mask_dir='data-CASIA1/mask'
     )
     dataloader = DataLoader(dataset, batch_size=2, shuffle=True, num_workers=0, drop_last=True)
 

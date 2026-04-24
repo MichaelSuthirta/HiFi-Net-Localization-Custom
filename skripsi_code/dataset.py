@@ -14,20 +14,30 @@ class ForgeryDataset(Dataset):
         
         self.image_files = []
         
-        # We assume for each image like 1_10.jpg, there is a mask 1_10_label.jpg
+        valid_extensions = ('.jpg', '.jpeg', '.png', '.bmp', '.tif', '.tiff')
         for file in os.listdir(fake_dir):
-            if file.endswith(('.jpg', '.png', '.jpeg')):
-                basename = file.split('.')[0]
-                # Guess mask name: Some use 1_10_label.jpg or just 1_10.jpg or 1_10.png
-                mask_file1 = f"{basename}_label.jpg"
-                mask_file2 = f"{basename}_label.png"
-                mask_file3 = file # Exactly same
+            if file.lower().endswith(valid_extensions):
+                basename, _ = os.path.splitext(file)
                 
-                # Check which one exists
+                # Possible mask filenames to check
+                possible_mask_names = [
+                    f"{basename}_label.jpg",
+                    f"{basename}_label.png",
+                    f"{basename}_label.jpeg",
+                    f"{basename}_gt.jpg",
+                    f"{basename}_gt.png",
+                    f"{basename}_gt.jpeg",
+                    f"{basename}.jpg",
+                    f"{basename}.png",
+                    f"{basename}.jpeg",
+                    file  # Exactly same name
+                ]
+                
                 mask_path = None
-                for mf in [mask_file1, mask_file2, mask_file3]:
-                    if os.path.exists(os.path.join(mask_dir, mf)):
-                        mask_path = os.path.join(mask_dir, mf)
+                for mf in possible_mask_names:
+                    candidate_path = os.path.join(mask_dir, mf)
+                    if os.path.exists(candidate_path):
+                        mask_path = candidate_path
                         break
                 
                 if mask_path is not None:
