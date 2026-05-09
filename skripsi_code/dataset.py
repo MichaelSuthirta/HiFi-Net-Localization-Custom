@@ -6,42 +6,62 @@ import numpy as np
 import torch
 
 class ForgeryDataset(Dataset):
-    def __init__(self, fake_dir, mask_dir, crop_size=(256, 256)):
+    def __init__(self, fake_dir, mask_dir, txt_dir=None, crop_size=(256, 256), invert_mask=None):
         super().__init__()
         self.fake_dir = fake_dir
         self.mask_dir = mask_dir
         self.crop_size = crop_size
+        self.txt_dir = txt_dir
+        
+        if invert_mask is None:
+            self.invert_mask = 'NIST16' in fake_dir or 'nist16' in fake_dir.lower()
+        else:
+            self.invert_mask = invert_mask
         
         self.image_files = []
         
-        valid_extensions = ('.jpg', '.jpeg', '.png', '.bmp', '.tif', '.tiff')
-        for file in os.listdir(fake_dir):
-            if file.lower().endswith(valid_extensions):
-                basename, _ = os.path.splitext(file)
-                
-                # Possible mask filenames to check
-                possible_mask_names = [
-                    f"{basename}_label.jpg",
-                    f"{basename}_label.png",
-                    f"{basename}_label.jpeg",
-                    f"{basename}_gt.jpg",
-                    f"{basename}_gt.png",
-                    f"{basename}_gt.jpeg",
-                    f"{basename}.jpg",
-                    f"{basename}.png",
-                    f"{basename}.jpeg",
-                    file  # Exactly same name
-                ]
-                
-                mask_path = None
-                for mf in possible_mask_names:
-                    candidate_path = os.path.join(mask_dir, mf)
-                    if os.path.exists(candidate_path):
-                        mask_path = candidate_path
-                        break
-                
-                if mask_path is not None:
-                    self.image_files.append((os.path.join(fake_dir, file), mask_path))
+        if self.txt_dir and os.path.exists(self.txt_dir):
+            txt_base_path = os.path.dirname(self.txt_dir)
+            with open(self.txt_dir, 'r') as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    parts = line.split()
+                    if len(parts) >= 2:
+                        img_path = os.path.join(txt_base_path, parts[0])
+                        mask_path = os.path.join(txt_base_path, parts[1])
+                        if os.path.exists(img_path) and os.path.exists(mask_path):
+                            self.image_files.append((img_path, mask_path))
+        else:
+            valid_extensions = ('.jpg', '.jpeg', '.png', '.bmp', '.tif', '.tiff')
+            for file in os.listdir(fake_dir):
+                if file.lower().endswith(valid_extensions):
+                    basename, _ = os.path.splitext(file)
+                    
+                    # Possible mask filenames to check
+                    possible_mask_names = [
+                        f"{basename}_label.jpg",
+                        f"{basename}_label.png",
+                        f"{basename}_label.jpeg",
+                        f"{basename}_gt.jpg",
+                        f"{basename}_gt.png",
+                        f"{basename}_gt.jpeg",
+                        f"{basename}.jpg",
+                        f"{basename}.png",
+                        f"{basename}.jpeg",
+                        file  
+                    ]
+                    
+                    mask_path = None
+                    for mf in possible_mask_names:
+                        candidate_path = os.path.join(mask_dir, mf)
+                        if os.path.exists(candidate_path):
+                            mask_path = candidate_path
+                            break
+                    
+                    if mask_path is not None:
+                        self.image_files.append((os.path.join(fake_dir, file), mask_path))
 
     def __len__(self):
         return len(self.image_files)
@@ -65,6 +85,10 @@ class ForgeryDataset(Dataset):
         
         # Mask to binary [0.0 or 1.0]
         mask = F.to_tensor(mask)    # [1, H, W]
+        
+        if self.invert_mask:
+            mask = 1.0 - mask
+            
         mask = (mask > 0.5).float() # Thresholding
         
         # Squeeze mask dimension, usually cross_entropy/bce expects [H, W] or [1,H,W]

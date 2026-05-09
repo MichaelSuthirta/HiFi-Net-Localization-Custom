@@ -1,4 +1,5 @@
 import os
+import csv
 import torch
 from torch.utils.data import DataLoader
 import matplotlib.pyplot as plt
@@ -19,8 +20,9 @@ def evaluate_and_visualize():
 
     # 1. Dataset & DataLoader (We use the same sample folders for demo purposes)
     dataset = ForgeryDataset(
-        fake_dir='data-CASIA1/fake',
-        mask_dir='data-CASIA1/mask'
+        fake_dir='data-NIST16/probe',
+        mask_dir='data-NIST16/mask',
+        txt_dir='data-NIST16/alllist.txt' if os.path.exists('data-NIST16/alllist.txt') else None
     )
     dataloader = DataLoader(dataset, batch_size=1, shuffle=False)
 
@@ -45,6 +47,11 @@ def evaluate_and_visualize():
     SegNet.eval()
 
     print(f"Starting evaluation... Saving visualizations to {results_dir}/")
+    
+    total_tp = 0
+    total_fp = 0
+    total_fn = 0
+
     with torch.no_grad():
         for i, batch in enumerate(tqdm(dataloader, desc="Evaluasi & Visualisasi")):
             images = batch['image'].to(device)
@@ -55,7 +62,16 @@ def evaluate_and_visualize():
             mask_feat, mask_binary, cls_4, cls_3, cls_2, cls_1 = SegNet(features, images)
             
             # mask_binary is [B, 256, 256] from sigmoid layer. Threshold it > 0.5
-            pred_mask = (mask_binary > 0.2).float()
+            pred_mask = (mask_binary > 0.5).float()
+            
+            # Calculate TP, FP, FN for current batch
+            tp = torch.sum((pred_mask == 1) & (masks == 1)).item()
+            fp = torch.sum((pred_mask == 1) & (masks == 0)).item()
+            fn = torch.sum((pred_mask == 0) & (masks == 1)).item()
+            
+            total_tp += tp
+            total_fp += fp
+            total_fn += fn
 
             # Move to CPU for visualization
             img_disp = images[0].cpu().permute(1, 2, 0).numpy()
@@ -94,6 +110,31 @@ def evaluate_and_visualize():
             plt.close(fig)
 
     print("Evaluation completed!")
+    
+    # Calculate global metrics
+    epsilon = 1e-7
+    precision = total_tp / (total_tp + total_fp + epsilon)
+    recall = total_tp / (total_tp + total_fn + epsilon)
+    f1_score = 2 * total_tp / (2 * total_tp + total_fp + total_fn + epsilon)
+    iou = total_tp / (total_tp + total_fp + total_fn + epsilon)
+    dice = f1_score
+    
+    print("\n" + "="*30)
+    print("      EVALUATION METRICS")
+    print("="*30)
+    print(f"Global Precision: {precision:.4f}")
+    print(f"Global Recall   : {recall:.4f}")
+    print(f"Global F1-Score : {f1_score:.4f}")
+    print(f"Global IoU      : {iou:.4f}")
+    print(f"Global Dice     : {dice:.4f}")
+    print("="*30 + "\n")
+
+    # Log to CSV
+    os.makedirs('logs', exist_ok=True)
+    with open('logs/test_metrics.csv', 'w', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow(['Precision', 'Recall', 'F1_Score', 'IoU', 'Dice'])
+        writer.writerow([precision, recall, f1_score, iou, dice])
 
 if __name__ == '__main__':
     evaluate_and_visualize()
