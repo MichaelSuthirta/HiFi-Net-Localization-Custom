@@ -11,6 +11,21 @@ from models.seg_hrnet_config import get_cfg_defaults
 from models.NLCDetection_loc import NLCDetection
 from utils.custom_loss import IsolatingLossFunction
 
+class DiceLoss(nn.Module):
+    def __init__(self, smooth=1.0):
+        super(DiceLoss, self).__init__()
+        self.smooth = smooth
+
+    def forward(self, inputs, targets):
+        # Flatten inputs and targets
+        inputs = inputs.view(-1)
+        targets = targets.view(-1)
+        
+        intersection = (inputs * targets).sum()                            
+        dice = (2.*intersection + self.smooth)/(inputs.sum() + targets.sum() + self.smooth)  
+        
+        return 1 - dice
+
 def get_device():
     if torch.cuda.is_available():
         return torch.device('cuda')
@@ -29,9 +44,9 @@ def train():
         # mask_dir='data-CASIA1/mask',
         # txt_dir='data-CASIA1/alllist.txt' if os.path.exists('data-NIST16/alllist.txt') else None
 
-        fake_dir='data-NIST16/probe',
-        mask_dir='data-NIST16/mask',
-        txt_dir='data-NIST16/alllist.txt' if os.path.exists('data-NIST16/alllist.txt') else None
+        mask_dir='manipulated_data_NIST16/mask',
+        fake_dir='manipulated_data_NIST16/probe',
+        txt_dir='manipulated_data_NIST16/alllist.txt' if os.path.exists('manipulated_data_NIST16/alllist.txt') else None
     )
     dataloader = DataLoader(dataset, batch_size=8, shuffle=True, num_workers=0, drop_last=True)
 
@@ -47,10 +62,11 @@ def train():
     
     # 3. Setup Optimizers
     params = list(FENet.parameters()) + list(SegNet.parameters())
-    optimizer = torch.optim.Adam(params, lr=1e-3)
+    optimizer = torch.optim.Adam(params, lr=1e-4)
 
     # 4. Setup Losses
     bce_loss_fn = nn.BCELoss()
+    dice_loss_fn = DiceLoss()
     ce_loss_fn = nn.CrossEntropyLoss()
 
     use_isolating_loss = False
@@ -66,7 +82,7 @@ def train():
         print("Precomputed center/radius not found, skipping Isolating Loss. (Using BCE only).")
 
     # 5. Training Loop
-    epochs = 10
+    epochs = 50
     
     # Initialize metric logging
     os.makedirs('logs', exist_ok=True)
@@ -108,7 +124,11 @@ def train():
                 total_fn += fn
             
             # Compute Losses
-            loss_bce = bce_loss_fn(mask_binary, masks)
+            loss_bce_only = bce_loss_fn(mask_binary, masks)
+            loss_dice = dice_loss_fn(mask_binary, masks)
+            
+            # BCE + Dice Loss mengatasi class imbalance
+            loss_bce = loss_bce_only + loss_dice
             
             if use_isolating_loss:
                 loss_metric, mani_loss, nat_loss = isolating_loss_fn(mask_feat, masks)
