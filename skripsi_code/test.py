@@ -20,15 +20,10 @@ def evaluate_and_visualize():
 
     # 1. Dataset & DataLoader (We use the same sample folders for demo purposes)
     dataset = ForgeryDataset(
-        # fake_dir='data-CASIA1/fake',
-        # mask_dir='data-CASIA1/mask',
-        # txt_dir='data-CASIA1/alllist.txt' if os.path.exists('data-NIST16/alllist.txt') else None
-
-        mask_dir='manipulated_data_NIST16/mask',
-        fake_dir='manipulated_data_NIST16/probe',
-        txt_dir='manipulated_data_NIST16/alllist.txt' if os.path.exists('manipulated_data_NIST16/alllist.txt') else None
+        fake_dir='E:/College/Pre-Thesis & Thesis/Dataset Fix April/FaShifter_extracted/Test/fake',
+        mask_dir='E:/College/Pre-Thesis & Thesis/Dataset Fix April/FaShifter_extracted/Test/mask'
     )
-    dataloader = DataLoader(dataset, batch_size=1, shuffle=False)
+    dataloader = DataLoader(dataset, batch_size=4, shuffle=False)
 
     if len(dataset) == 0:
         print("Dataset is empty. Exiting...")

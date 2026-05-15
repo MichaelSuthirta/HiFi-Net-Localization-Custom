@@ -35,20 +35,16 @@ def get_device():
         return torch.device('cpu')
 
 def train():
+    torch.cuda.empty_cache()
     device = get_device()
     print(f"Using device: {device}")
 
     # 1. Dataset & DataLoader
     dataset = ForgeryDataset(
-        # fake_dir='data-CASIA1/fake',
-        # mask_dir='data-CASIA1/mask',
-        # txt_dir='data-CASIA1/alllist.txt' if os.path.exists('data-NIST16/alllist.txt') else None
-
-        mask_dir='manipulated_data_NIST16/mask',
-        fake_dir='manipulated_data_NIST16/probe',
-        txt_dir='manipulated_data_NIST16/alllist.txt' if os.path.exists('manipulated_data_NIST16/alllist.txt') else None
+        fake_dir='E:/College/Pre-Thesis & Thesis/Dataset Fix April/FaShifter_extracted/Train/fake',
+        mask_dir='E:/College/Pre-Thesis & Thesis/Dataset Fix April/FaShifter_extracted/Train/mask'
     )
-    dataloader = DataLoader(dataset, batch_size=8, shuffle=True, num_workers=0, drop_last=True)
+    dataloader = DataLoader(dataset, batch_size=4, shuffle=True, num_workers=2, drop_last=True)
 
     if len(dataset) == 0:
         print("Dataset is empty. Exiting...")
@@ -70,7 +66,7 @@ def train():
     ce_loss_fn = nn.CrossEntropyLoss()
 
     use_isolating_loss = False
-    center_path = 'center_loc/radius_center.pth'
+    center_path = './center_loc/radius_center.pth'
     if os.path.exists(center_path):
         print(f"Loading precomputed center and radius from {center_path}")
         ckpt = torch.load(center_path, map_location=device)

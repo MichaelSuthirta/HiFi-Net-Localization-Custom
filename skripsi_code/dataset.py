@@ -62,6 +62,35 @@ class ForgeryDataset(Dataset):
                     
                     if mask_path is not None:
                         self.image_files.append((os.path.join(fake_dir, file), mask_path))
+        valid_extensions = ('.jpg', '.jpeg', '.png', '.bmp', '.tif', '.tiff')
+        for file in os.listdir(fake_dir):
+            if file.lower().endswith(valid_extensions):
+                basename, _ = os.path.splitext(file)
+                
+                # Possible mask filenames to check
+                possible_mask_names = [
+                    f"{basename}_label.jpg",
+                    f"{basename}_label.png",
+                    f"{basename}_label.jpeg",
+                    f"{basename}_gt.jpg",
+                    f"{basename}_gt.png",
+                    f"{basename}_mask.png",
+                    f"{basename}_gt.jpeg",
+                    f"{basename}.jpg",
+                    f"{basename}.png",
+                    f"{basename}.jpeg",
+                    file  # Exactly same name
+                ]
+                
+                mask_path = None
+                for mf in possible_mask_names:
+                    candidate_path = os.path.join(mask_dir, mf)
+                    if os.path.exists(candidate_path):
+                        mask_path = candidate_path
+                        break
+                
+                if mask_path is not None:
+                    self.image_files.append((os.path.join(fake_dir, file), mask_path))
 
     def __len__(self):
         return len(self.image_files)
@@ -112,8 +141,8 @@ class ForgeryDataset(Dataset):
 if __name__ == '__main__':
     # Test dataloader
     dataset = ForgeryDataset(
-        fake_dir='../dataset_small_sample/fake_small_sample',
-        mask_dir='../dataset_small_sample/mask_small_sample'
+        fake_dir='./Dataset Fix April/STGAN/fake',
+        mask_dir='./Dataset Fix April/STGAN/mask'
     )
     print(f"Loaded {len(dataset)} samples")
     if len(dataset) > 0:
