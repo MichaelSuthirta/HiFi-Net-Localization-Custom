@@ -99,8 +99,8 @@ if __name__ == "__main__":
     parser.add_argument("-i", "--input_dir", type=str, required=True, help="Direktori asal gambar.")
     parser.add_argument("-o", "--output_dir", type=str, default="manipulated_data", help="Direktori tujuan.")
     parser.add_argument("-s", "--scale_factor", type=float, default=0.5, help="Faktor downsampling resolusi.")
-    parser.add_argument("-q", "--quality", type=int, default=60, help="Kualitas kompresi JPEG per rantai (1-100).")
-    parser.add_argument("-c", "--chain_saves", type=int, default=3, help="Jumlah gambar di-save ulang/di-forward. Semakin banyak, semakin hancur noise khasnya.")
+    parser.add_argument("-q", "--quality", type=int, default=10, help="Kualitas kompresi JPEG per rantai (1-100).")
+    parser.add_argument("-c", "--chain_saves", type=int, default=10, help="Jumlah gambar di-save ulang/di-forward. Semakin banyak, semakin hancur noise khasnya.")
     
     args = parser.parse_args()
     process_directory(args.input_dir, args.output_dir, args.scale_factor, args.quality, args.chain_saves)
