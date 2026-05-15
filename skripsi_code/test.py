@@ -9,21 +9,18 @@ from dataset import ForgeryDataset
 from models.seg_hrnet import HighResolutionNet
 from models.seg_hrnet_config import get_cfg_defaults
 from models.NLCDetection_loc import NLCDetection
-from train import get_device
+# from train import get_device
 
-def evaluate_and_visualize():
-    device = get_device()
+def evaluate_and_visualize(device, dataset_test, batchSize = 4):
+    # device = get_device()
     print(f"Using device for testing: {device}")
 
     results_dir = 'results'
     os.makedirs(results_dir, exist_ok=True)
 
     # 1. Dataset & DataLoader (We use the same sample folders for demo purposes)
-    dataset = ForgeryDataset(
-        fake_dir='E:/College/Pre-Thesis & Thesis/Dataset Fix April/FaShifter_extracted/Test/fake',
-        mask_dir='E:/College/Pre-Thesis & Thesis/Dataset Fix April/FaShifter_extracted/Test/mask'
-    )
-    dataloader = DataLoader(dataset, batch_size=4, shuffle=False)
+    dataset = dataset_test
+    dataloader = DataLoader(dataset, batch_size=batchSize, shuffle=False)
 
     if len(dataset) == 0:
         print("Dataset is empty. Exiting...")

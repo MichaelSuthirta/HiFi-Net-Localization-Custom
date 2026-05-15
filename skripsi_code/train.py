@@ -10,21 +10,7 @@ from models.seg_hrnet import HighResolutionNet, get_seg_model
 from models.seg_hrnet_config import get_cfg_defaults
 from models.NLCDetection_loc import NLCDetection
 from utils.custom_loss import IsolatingLossFunction
-
-class DiceLoss(nn.Module):
-    def __init__(self, smooth=1.0):
-        super(DiceLoss, self).__init__()
-        self.smooth = smooth
-
-    def forward(self, inputs, targets):
-        # Flatten inputs and targets
-        inputs = inputs.view(-1)
-        targets = targets.view(-1)
-        
-        intersection = (inputs * targets).sum()                            
-        dice = (2.*intersection + self.smooth)/(inputs.sum() + targets.sum() + self.smooth)  
-        
-        return 1 - dice
+import utils.DiceLoss as DiceLoss
 
 def get_device():
     if torch.cuda.is_available():
@@ -34,17 +20,14 @@ def get_device():
     else:
         return torch.device('cpu')
 
-def train():
+def train(device, dataset_train, epochs, batchSize = 4, learnRate = 1e-4):
     torch.cuda.empty_cache()
-    device = get_device()
-    print(f"Using device: {device}")
+    # device = get_device()
+    # print(f"Using device: {device}")
 
     # 1. Dataset & DataLoader
-    dataset = ForgeryDataset(
-        fake_dir='E:/College/Pre-Thesis & Thesis/Dataset Fix April/FaShifter_extracted/Train/fake',
-        mask_dir='E:/College/Pre-Thesis & Thesis/Dataset Fix April/FaShifter_extracted/Train/mask'
-    )
-    dataloader = DataLoader(dataset, batch_size=4, shuffle=True, num_workers=2, drop_last=True)
+    dataset = dataset_train
+    dataloader = DataLoader(dataset, batch_size=batchSize, shuffle=True, num_workers=1, drop_last=True)
 
     if len(dataset) == 0:
         print("Dataset is empty. Exiting...")
@@ -58,7 +41,7 @@ def train():
     
     # 3. Setup Optimizers
     params = list(FENet.parameters()) + list(SegNet.parameters())
-    optimizer = torch.optim.Adam(params, lr=1e-4)
+    optimizer = torch.optim.Adam(params, lr=learnRate)
 
     # 4. Setup Losses
     bce_loss_fn = nn.BCELoss()
@@ -78,7 +61,7 @@ def train():
         print("Precomputed center/radius not found, skipping Isolating Loss. (Using BCE only).")
 
     # 5. Training Loop
-    epochs = 50
+    # epochs = 50
     
     # Initialize metric logging
     os.makedirs('logs', exist_ok=True)
