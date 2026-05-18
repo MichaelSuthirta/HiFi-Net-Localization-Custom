@@ -35,27 +35,29 @@ def get_device():
         return torch.device('cpu')
 
 def train():
+    torch.cuda.empty_cache()
     device = get_device()
     print(f"Using device: {device}")
 
     # 1. Dataset & DataLoader
+
     dataset = ForgeryDataset(
         # fake_dir='data-CASIA1/fake',
         # mask_dir='data-CASIA1/mask',
         # txt_dir='data-CASIA1/alllist.txt' if os.path.exists('data-NIST16/alllist.txt') else None
 
-        mask_dir='datasets/data_split_STGAN+COVERAGE/train/masks',
-        fake_dir='datasets/data_split_STGAN+COVERAGE/train/images_compressed',
-        txt_dir='datasets/data_split_STGAN+COVERAGE/train/train.txt' if os.path.exists('datasets/data_split_STGAN+COVERAGE/train/train.txt') else None
+        mask_dir='datasets/data_split_NIST16/train/mask',
+        fake_dir='datasets/data_split_NIST16/train/probe',
+        txt_dir='datasets/data_split_NIST16/train/alllist.txt' if os.path.exists('datasets/data_split_NIST16/train/alllist.txt') else None
     )
-    dataloader = DataLoader(dataset, batch_size=4, shuffle=True, num_workers=2, drop_last=True)
+    dataloader = DataLoader(dataset, batch_size=2, shuffle=True, num_workers=2, drop_last=True)
 
     val_dataset = ForgeryDataset(
-        mask_dir='datasets/data_split_STGAN+COVERAGE/val/masks',
-        fake_dir='datasets/data_split_STGAN+COVERAGE/val/images_compressed',
-        txt_dir='datasets/data_split_STGAN+COVERAGE/val/val.txt' if os.path.exists('datasets/data_split_STGAN+COVERAGE/val/val.txt') else None
+        mask_dir='datasets/data_split_NIST16/val/mask',
+        fake_dir='datasets/data_split_NIST16/val/probe',
+        txt_dir='datasets/data_split_NIST16/val/alllist.txt' if os.path.exists('datasets/data_split_NIST16/val/alllist.txt') else None
     )
-    val_dataloader = DataLoader(val_dataset, batch_size=4, shuffle=False, num_workers=2, drop_last=False)
+    val_dataloader = DataLoader(val_dataset, batch_size=2, shuffle=False, num_workers=2, drop_last=False)
 
     if len(dataset) == 0:
         print("Dataset is empty. Exiting...")
@@ -77,7 +79,7 @@ def train():
     ce_loss_fn = nn.CrossEntropyLoss()
 
     use_isolating_loss = False
-    center_path = 'center_loc/radius_center.pth'
+    center_path = './center_loc/radius_center.pth'
     if os.path.exists(center_path):
         print(f"Loading precomputed center and radius from {center_path}")
         ckpt = torch.load(center_path, map_location=device)
@@ -89,7 +91,7 @@ def train():
         print("Precomputed center/radius not found, skipping Isolating Loss. (Using BCE only).")
 
     # 5. Training Loop
-    epochs = 50
+    epochs = 200
     start_epoch = 0
     checkpoint_path = 'weights/checkpoint.pth'
     best_val_f1 = 0.0
@@ -263,7 +265,12 @@ def train():
             torch.save(FENet.state_dict(), 'weights/FENet_best.pth')
             torch.save(SegNet.state_dict(), 'weights/SegNet_best.pth')
             print(f"*** New Best Model Saved (Val F1: {best_val_f1:.4f}) ***")
-            
+        
+        if (epoch+1) % 25 == 0:
+            torch.save(FENet.state_dict(), f'weights/FENet_{epoch+1}.pth')
+            torch.save(SegNet.state_dict(), f'weights/SegNet_{epoch+1}.pth')
+            print(f"*** Model Saved at Epoch {epoch+1} ***")
+        
         print(f"Checkpoint saved at epoch {epoch+1}")
     print("Training finished! Saving weights...")
     os.makedirs('weights', exist_ok=True)

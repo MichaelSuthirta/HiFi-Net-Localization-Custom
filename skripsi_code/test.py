@@ -24,9 +24,9 @@ def evaluate_and_visualize():
         # mask_dir='data-CASIA1/mask',
         # txt_dir='data-CASIA1/alllist.txt' if os.path.exists('data-NIST16/alllist.txt') else None
 
-        mask_dir='datasets/data_split_STGAN+COVERAGE/test/masks',
-        fake_dir='datasets/data_split_STGAN+COVERAGE/test/images',
-        txt_dir='datasets/data_split_STGAN+COVERAGE/test/test.txt' if os.path.exists('datasets/data_split_STGAN+COVERAGE/test/test.txt') else None
+        mask_dir='datasets/data_split_NIST16/test/mask',
+        fake_dir='datasets/data_split_NIST16/test/probe',
+        txt_dir='datasets/data_split_NIST16/test/alllist.txt' if os.path.exists('datasets/data_split_NIST16/test/alllist.txt') else None
     )
     dataloader = DataLoader(dataset, batch_size=1, shuffle=False)
 
@@ -41,8 +41,8 @@ def evaluate_and_visualize():
     SegNet = NLCDetection().to(device)
     
     if os.path.exists('weights/FENet_latest.pth') and os.path.exists('weights/SegNet_latest.pth'):
-        FENet.load_state_dict(torch.load('weights/FENet_latest.pth', map_location=device))
-        SegNet.load_state_dict(torch.load('weights/SegNet_latest.pth', map_location=device))
+        FENet.load_state_dict(torch.load('weights/FENet_175.pth', map_location=device))
+        SegNet.load_state_dict(torch.load('weights/SegNet_175.pth', map_location=device))
         print("Successfully loaded trained weights.")
     else:
         print("Warning: Trained weights not found. Using untrained models.")
