@@ -6,3 +6,6 @@ data-NIST16
 results
 manipulated_data
 manipulated_data_NIST16
+datasets
+logs
+weights
