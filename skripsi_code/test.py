@@ -24,9 +24,9 @@ def evaluate_and_visualize():
         # mask_dir='data-CASIA1/mask',
         # txt_dir='data-CASIA1/alllist.txt' if os.path.exists('data-NIST16/alllist.txt') else None
 
-        mask_dir='datasets/data_split_NIST16/test/mask',
-        fake_dir='datasets/data_split_NIST16/test/probe',
-        txt_dir='datasets/data_split_NIST16/test/alllist.txt' if os.path.exists('datasets/data_split_NIST16/test/alllist.txt') else None
+        mask_dir='datasets/data_split_combined/test/masks',
+        fake_dir='datasets/data_split_combined/test/images',
+        txt_dir='datasets/data_split_combined/test/alllist.txt'
     )
     dataloader = DataLoader(dataset, batch_size=1, shuffle=False)
 
@@ -41,8 +41,8 @@ def evaluate_and_visualize():
     SegNet = NLCDetection().to(device)
     
     if os.path.exists('weights/FENet_latest.pth') and os.path.exists('weights/SegNet_latest.pth'):
-        FENet.load_state_dict(torch.load('weights/FENet_175.pth', map_location=device))
-        SegNet.load_state_dict(torch.load('weights/SegNet_175.pth', map_location=device))
+        FENet.load_state_dict(torch.load('weights/FENet_best.pth', map_location=device))
+        SegNet.load_state_dict(torch.load('weights/SegNet_best.pth', map_location=device))
         print("Successfully loaded trained weights.")
     else:
         print("Warning: Trained weights not found. Using untrained models.")
@@ -87,26 +87,49 @@ def evaluate_and_visualize():
             std = [0.229, 0.224, 0.225]
             img_disp = (img_disp * std + mean).clip(0, 1)
 
-            # Create side-by-side plot with Soft Mask
-            fig, axes = plt.subplots(1, 4, figsize=(16, 4))
+            # Membuat Color Overlay (TP=Hijau, FP=Merah, FN=Biru)
+            overlay = img_disp.copy()
+            
+            # Mask boolean untuk masing-masing error
+            # Pastikan dimensinya sesuai [H, W]
+            gt_disp_2d = gt_disp.squeeze() if gt_disp.ndim == 3 else gt_disp
+            pred_disp_2d = pred_disp.squeeze() if pred_disp.ndim == 3 else pred_disp
+            
+            tp_mask = (gt_disp_2d == 1) & (pred_disp_2d == 1)
+            fp_mask = (gt_disp_2d == 0) & (pred_disp_2d == 1)
+            fn_mask = (gt_disp_2d == 1) & (pred_disp_2d == 0)
+            
+            # Aplikasikan warna RGB pekat pada area yang relevan
+            overlay[tp_mask] = [0, 1, 0] # Hijau
+            overlay[fp_mask] = [1, 0, 0] # Merah
+            overlay[fn_mask] = [0, 0, 1] # Biru
+            
+            # Blend gambar asli dengan warna overlay menggunakan transparansi (alpha)
+            alpha = 0.5
+            blended_overlay = (1 - alpha) * img_disp + alpha * overlay
+            
+            # Create side-by-side plot
+            fig, axes = plt.subplots(1, 5, figsize=(20, 4))
             
             axes[0].imshow(img_disp)
             axes[0].set_title('Fake Original Image')
             axes[0].axis('off')
 
-            axes[1].imshow(gt_disp, cmap='gray')
+            axes[1].imshow(gt_disp_2d, cmap='gray')
             axes[1].set_title('Ground Truth Mask')
             axes[1].axis('off')
 
-            # Render the raw probability before thresholding 
-            # This helps debug if the model is learning anything or stuck at ~0.3
-            axes[2].imshow(mask_binary[0].detach().cpu().numpy(), cmap='inferno')
+            axes[2].imshow(mask_binary[0].detach().cpu().squeeze().numpy(), cmap='inferno')
             axes[2].set_title('Raw Soft Mask (Heatmap)')
             axes[2].axis('off')
 
-            axes[3].imshow(pred_disp, cmap='gray')
+            axes[3].imshow(pred_disp_2d, cmap='gray')
             axes[3].set_title('Thresholded Mask (>0.5)')
             axes[3].axis('off')
+            
+            axes[4].imshow(blended_overlay)
+            axes[4].set_title('Overlay (TP:G, FP:R, FN:B)')
+            axes[4].axis('off')
             
             plt.tight_layout()
             save_path = os.path.join(results_dir, f'result_sample_{i+1}.png')

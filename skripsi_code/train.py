@@ -46,18 +46,19 @@ def train():
         # mask_dir='data-CASIA1/mask',
         # txt_dir='data-CASIA1/alllist.txt' if os.path.exists('data-NIST16/alllist.txt') else None
 
-        mask_dir='datasets/data_split_NIST16/train/mask',
-        fake_dir='datasets/data_split_NIST16/train/probe',
-        txt_dir='datasets/data_split_NIST16/train/alllist.txt' if os.path.exists('datasets/data_split_NIST16/train/alllist.txt') else None
+        mask_dir='datasets/data_split_combined/train/masks',
+        fake_dir='datasets/data_split_combined/train/images',
+        is_train=True,
+        txt_dir='datasets/data_split_combined/train/alllist.txt'
     )
-    dataloader = DataLoader(dataset, batch_size=2, shuffle=True, num_workers=2, drop_last=True)
+    dataloader = DataLoader(dataset, batch_size=4, shuffle=True, num_workers=2, drop_last=True)
 
     val_dataset = ForgeryDataset(
-        mask_dir='datasets/data_split_NIST16/val/mask',
-        fake_dir='datasets/data_split_NIST16/val/probe',
-        txt_dir='datasets/data_split_NIST16/val/alllist.txt' if os.path.exists('datasets/data_split_NIST16/val/alllist.txt') else None
+        mask_dir='datasets/data_split_combined/val/masks',
+        fake_dir='datasets/data_split_combined/val/images',
+        txt_dir='datasets/data_split_combined/val/alllist.txt'
     )
-    val_dataloader = DataLoader(val_dataset, batch_size=2, shuffle=False, num_workers=2, drop_last=False)
+    val_dataloader = DataLoader(val_dataset, batch_size=4, shuffle=False, num_workers=2, drop_last=False)
 
     if len(dataset) == 0:
         print("Dataset is empty. Exiting...")
@@ -71,7 +72,8 @@ def train():
     
     # 3. Setup Optimizers
     params = list(FENet.parameters()) + list(SegNet.parameters())
-    optimizer = torch.optim.Adam(params, lr=1e-4)
+    optimizer = torch.optim.Adam(params, lr=1e-4, weight_decay=1e-5)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=10)
 
     # 4. Setup Losses
     bce_loss_fn = nn.BCELoss()
@@ -95,6 +97,10 @@ def train():
     start_epoch = 0
     checkpoint_path = 'weights/checkpoint.pth'
     best_val_f1 = 0.0
+    
+    # Early Stopping variables
+    patience = 30
+    epochs_no_improve = 0
 
     # Load checkpoint jika ada
     if os.path.exists(checkpoint_path):
@@ -106,6 +112,10 @@ def train():
         start_epoch = checkpoint['epoch'] + 1
         if 'best_val_f1' in checkpoint:
             best_val_f1 = checkpoint['best_val_f1']
+        if 'scheduler_state_dict' in checkpoint:
+            scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+        if 'epochs_no_improve' in checkpoint:
+            epochs_no_improve = checkpoint['epochs_no_improve']
         print(f"Resuming training from epoch {start_epoch + 1}")
     else:
         print("No checkpoint found. Starting from scratch.")
@@ -256,22 +266,45 @@ def train():
             'FENet_state_dict': FENet.state_dict(),
             'SegNet_state_dict': SegNet.state_dict(),
             'optimizer_state_dict': optimizer.state_dict(),
+            'scheduler_state_dict': scheduler.state_dict(),
+            'epochs_no_improve': epochs_no_improve,
             'loss': avg_loss,
             'best_val_f1': best_val_f1
         }, checkpoint_path)
         
         if val_f1_score > best_val_f1:
             best_val_f1 = val_f1_score
+            epochs_no_improve = 0
             torch.save(FENet.state_dict(), 'weights/FENet_best.pth')
             torch.save(SegNet.state_dict(), 'weights/SegNet_best.pth')
             print(f"*** New Best Model Saved (Val F1: {best_val_f1:.4f}) ***")
+        else:
+            epochs_no_improve += 1
+            print(f"Early Stopping counter: {epochs_no_improve}/{patience}")
+            
+        # Step LR Scheduler
+        scheduler.step(val_f1_score)
+        
+        # Print Current LR
+        current_lr = optimizer.param_groups[0]['lr']
+        print(f"Current Learning Rate: {current_lr}")
         
         if (epoch+1) % 25 == 0:
-            torch.save(FENet.state_dict(), f'weights/FENet_{epoch+1}.pth')
-            torch.save(SegNet.state_dict(), f'weights/SegNet_{epoch+1}.pth')
-            print(f"*** Model Saved at Epoch {epoch+1} ***")
+            import shutil
+            if os.path.exists('weights/FENet_best.pth') and os.path.exists('weights/SegNet_best.pth'):
+                shutil.copy('weights/FENet_best.pth', f'weights/FENet_{epoch+1}.pth')
+                shutil.copy('weights/SegNet_best.pth', f'weights/SegNet_{epoch+1}.pth')
+                print(f"*** Best Model up to Epoch {epoch+1} Saved as Snapshot ***")
+            else:
+                torch.save(FENet.state_dict(), f'weights/FENet_{epoch+1}.pth')
+                torch.save(SegNet.state_dict(), f'weights/SegNet_{epoch+1}.pth')
+                print(f"*** Current Model Saved at Epoch {epoch+1} ***")
         
         print(f"Checkpoint saved at epoch {epoch+1}")
+        
+        if epochs_no_improve >= patience:
+            print("Early stopping triggered! Training stopped.")
+            break
     print("Training finished! Saving weights...")
     os.makedirs('weights', exist_ok=True)
     torch.save(FENet.state_dict(), 'weights/FENet_latest.pth')

@@ -68,6 +68,9 @@ def split_dataset(image_dir, mask_dir, output_dir, train_ratio, val_ratio, test_
     # Acak urutan data
     random.shuffle(valid_pairs)
     
+    # Pangkas jadi 1000 data
+    valid_pairs = valid_pairs[:1000]
+    
     # Hitung jumlah untuk setiap split
     total = len(valid_pairs)
     train_end = int(total * train_ratio)
@@ -107,19 +110,17 @@ def split_dataset(image_dir, mask_dir, output_dir, train_ratio, val_ratio, test_
 
 if __name__ == '__main__':
 
-    INPUT_IMAGE_DIR = 'datasets/Dataset STGAN + COVERAGE/May_train/fake'
-    INPUT_MASK_DIR = 'datasets/Dataset STGAN + COVERAGE/May_train/mask'
-    TXT_FILE_DIR = 'manipulated_data_NIST16/alllist.txt' 
-
+    INPUT_IMAGE_DIR = 'datasets/CASIA2/fake'
+    INPUT_MASK_DIR = 'datasets/CASIA2/mask'
     
-    OUTPUT_BASE_DIR = 'data_split_NIST16'
+    OUTPUT_BASE_DIR = 'datasets/data_split_CASIA2'
     
     split_dataset(
         image_dir=INPUT_IMAGE_DIR, 
         mask_dir=INPUT_MASK_DIR, 
         output_dir=OUTPUT_BASE_DIR,
-        train_ratio=0.3,
-        val_ratio=0.6, 
+        train_ratio=0.8,
+        val_ratio=0.1, 
         test_ratio=0.1,
-        txt_file=TXT_FILE_DIR
+        txt_file=None
     )
