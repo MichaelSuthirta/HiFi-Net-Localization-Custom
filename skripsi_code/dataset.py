@@ -89,12 +89,23 @@ class ForgeryDataset(Dataset):
         
         if self.is_train:
             import random
+            import io
+            
+            # 1. Spatial Augmentations
             if random.random() > 0.5:
                 image = F.hflip(image)
                 mask = F.hflip(mask)
             if random.random() > 0.5:
                 image = F.vflip(image)
                 mask = F.vflip(mask)
+                
+            # 2. Compression Augmentation (Random JPEG Quality)
+            if random.random() > 0.5:
+                quality = random.randint(50, 100)
+                buffer = io.BytesIO()
+                image.save(buffer, format='JPEG', quality=quality)
+                buffer.seek(0)
+                image = Image.open(buffer).convert('RGB')
         
         # Convert to tensor. Image: [3,H,W] scaled to 0-1.
         image = F.to_tensor(image)
