@@ -46,17 +46,17 @@ def train():
         # mask_dir='data-CASIA1/mask',
         # txt_dir='data-CASIA1/alllist.txt' if os.path.exists('data-NIST16/alllist.txt') else None
 
-        mask_dir='datasets/data_split_combined/train/masks',
-        fake_dir='datasets/data_split_combined/train/images',
+        mask_dir='datasets/data_split_STGAN_FaceShifter/train/masks',
+        fake_dir='datasets/data_split_STGAN_FaceShifter/train/images',
         is_train=True,
-        txt_dir='datasets/data_split_combined/train/alllist.txt'
+        txt_dir='datasets/data_split_STGAN_FaceShifter/train/alllist.txt'
     )
     dataloader = DataLoader(dataset, batch_size=4, shuffle=True, num_workers=2, drop_last=True)
 
     val_dataset = ForgeryDataset(
-        mask_dir='datasets/data_split_combined/val/masks',
-        fake_dir='datasets/data_split_combined/val/images',
-        txt_dir='datasets/data_split_combined/val/alllist.txt'
+        mask_dir='datasets/data_split_STGAN_FaceShifter/val/masks',
+        fake_dir='datasets/data_split_STGAN_FaceShifter/val/images',
+        txt_dir='datasets/data_split_STGAN_FaceShifter/val/alllist.txt'
     )
     val_dataloader = DataLoader(val_dataset, batch_size=4, shuffle=False, num_workers=2, drop_last=False)
 
@@ -70,6 +70,14 @@ def train():
     FENet = get_seg_model(cfg).to(device)
     SegNet = NLCDetection().to(device)
     
+    # if os.path.exists('weights/FENet_modal_awal.pth'):
+    #     FENet.load_state_dict(torch.load('weights/FENet_modal_awal.pth', map_location=device))
+    #     print("FENet weights loaded.")
+    #     SegNet.load_state_dict(torch.load('weights/SegNet_modal_awal.pth', map_location=device))
+    #     print("SegNet weights loaded.")
+    # else:
+    #     print("No weights found for FENet and SegNet. Training from scratch.")
+
     # 3. Setup Optimizers
     params = list(FENet.parameters()) + list(SegNet.parameters())
     optimizer = torch.optim.Adam(params, lr=1e-4, weight_decay=1e-5)

@@ -110,10 +110,10 @@ def split_dataset(image_dir, mask_dir, output_dir, train_ratio, val_ratio, test_
 
 if __name__ == '__main__':
 
-    INPUT_IMAGE_DIR = 'datasets/CASIA2/fake'
-    INPUT_MASK_DIR = 'datasets/CASIA2/mask'
+    INPUT_IMAGE_DIR = 'datasets/STGAN_FaceShifter/fake'
+    INPUT_MASK_DIR = 'datasets/STGAN_FaceShifter/mask'
     
-    OUTPUT_BASE_DIR = 'datasets/data_split_CASIA2'
+    OUTPUT_BASE_DIR = 'datasets/data_split_STGAN_FaceShifter'
     
     split_dataset(
         image_dir=INPUT_IMAGE_DIR, 

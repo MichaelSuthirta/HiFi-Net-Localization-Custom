@@ -24,9 +24,9 @@ def evaluate_and_visualize():
         # mask_dir='data-CASIA1/mask',
         # txt_dir='data-CASIA1/alllist.txt' if os.path.exists('data-NIST16/alllist.txt') else None
 
-        mask_dir='datasets/data_split_combined/test/masks',
-        fake_dir='datasets/data_split_combined/test/images',
-        txt_dir='datasets/data_split_combined/test/alllist.txt'
+        mask_dir='datasets/individual/CASIA1/test/masks',
+        fake_dir='datasets/individual/CASIA1/test/images',
+        txt_dir='datasets/individual/CASIA1/test/alllist.txt'
     )
     dataloader = DataLoader(dataset, batch_size=1, shuffle=False)
 
