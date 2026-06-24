@@ -27,37 +27,46 @@ def split_dataset(image_dir, mask_dir, output_dir, train_ratio, val_ratio, test_
                         valid_pairs.append((img_path, mask_path))
                     else:
                         print(f"Warning: File tidak ditemukan -> {img_path} atau {mask_path}")
-    else:
-        print("Mencari pasangan gambar dan mask dari direktori...")
-        image_files = [f for f in os.listdir(image_dir) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.tif', '.tiff'))]
+    
+    print("Mencari pasangan gambar dan mask dari direktori untuk file yang belum masuk...")
+    existing_images = set([os.path.abspath(pair[0]) for pair in valid_pairs])
+    
+    image_files = [f for f in os.listdir(image_dir) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.tif', '.tiff'))]
+    
+    for img_name in image_files:
+        img_full_path = os.path.join(image_dir, img_name)
+        if os.path.abspath(img_full_path) in existing_images:
+            continue
+            
+        base_name = os.path.splitext(img_name)[0]
         
-        for img_name in image_files:
-            base_name = os.path.splitext(img_name)[0]
-            
-            # kandidat mask
-            mask_candidates = [
-                f"{base_name}_label.jpg",
-                f"{base_name}_label.png",
-                f"{base_name}_label.jpeg",
-                f"{base_name}_gt.jpg",
-                f"{base_name}_gt.png",
-                f"{base_name}_gt.jpeg",
-                f"{base_name}.jpg",
-                f"{base_name}.png",
-                f"{base_name}.jpeg",
-                img_name
-            ]
-            
-            found_mask = None
-            for cand in mask_candidates:
-                if os.path.exists(os.path.join(mask_dir, cand)):
-                    found_mask = cand
-                    break
-                    
-            if found_mask:
-                valid_pairs.append((os.path.join(image_dir, img_name), os.path.join(mask_dir, found_mask)))
-            else:
-                print(f"Warning: Mask tidak ditemukan untuk gambar {img_name}")
+        # kandidat mask
+        mask_candidates = [
+            f"{base_name}_label.jpg",
+            f"{base_name}_label.png",
+            f"{base_name}_label.jpeg",
+            f"{base_name}_gt.jpg",
+            f"{base_name}_gt.png",
+            f"{base_name}_gt.jpeg",
+            f"{base_name}_mask.jpg",
+            f"{base_name}_mask.png",
+            f"{base_name}_mask.jpeg",
+            f"{base_name}.jpg",
+            f"{base_name}.png",
+            f"{base_name}.jpeg",
+            img_name
+        ]
+        
+        found_mask = None
+        for cand in mask_candidates:
+            if os.path.exists(os.path.join(mask_dir, cand)):
+                found_mask = cand
+                break
+                
+        if found_mask:
+            valid_pairs.append((img_full_path, os.path.join(mask_dir, found_mask)))
+        else:
+            print(f"Warning: Mask tidak ditemukan untuk gambar {img_name}")
             
     print(f"Ditemukan {len(valid_pairs)} pasangan gambar & mask yang valid.")
     
@@ -68,8 +77,7 @@ def split_dataset(image_dir, mask_dir, output_dir, train_ratio, val_ratio, test_
     # Acak urutan data
     random.shuffle(valid_pairs)
     
-    # Pangkas jadi 1000 data
-    valid_pairs = valid_pairs[:1000]
+    print(f"Menggunakan semua {len(valid_pairs)} pasangan data.")
     
     # Hitung jumlah untuk setiap split
     total = len(valid_pairs)
@@ -92,15 +100,23 @@ def split_dataset(image_dir, mask_dir, output_dir, train_ratio, val_ratio, test_
         os.makedirs(split_img_dir, exist_ok=True)
         os.makedirs(split_mask_dir, exist_ok=True)
         
-        for src_img, src_mask in tqdm(pairs):
-            img_name = os.path.basename(src_img)
-            mask_name = os.path.basename(src_mask)
-            
-            dst_img = os.path.join(split_img_dir, img_name)
-            dst_mask = os.path.join(split_mask_dir, mask_name)
-            
-            shutil.copy2(src_img, dst_img)
-            shutil.copy2(src_mask, dst_mask)
+        # Generate alllist.txt untuk mapping image -> mask
+        alllist_path = os.path.join(output_dir, split_name, 'alllist.txt')
+        with open(alllist_path, 'w') as alllist_f:
+            for src_img, src_mask in tqdm(pairs):
+                img_name = os.path.basename(src_img)
+                mask_name = os.path.basename(src_mask)
+                
+                dst_img = os.path.join(split_img_dir, img_name)
+                dst_mask = os.path.join(split_mask_dir, mask_name)
+                
+                shutil.copy2(src_img, dst_img)
+                shutil.copy2(src_mask, dst_mask)
+                
+                # Tulis mapping relatif ke folder split
+                alllist_f.write(f"images/{img_name} masks/{mask_name}\n")
+        
+        print(f"  -> alllist.txt berhasil dibuat di {alllist_path}")
             
     print(f"\nSelesai! Dataset berhasil dibagi di dalam folder: '{output_dir}'")
     print(f"Struktur Folder:")
@@ -110,10 +126,10 @@ def split_dataset(image_dir, mask_dir, output_dir, train_ratio, val_ratio, test_
 
 if __name__ == '__main__':
 
-    INPUT_IMAGE_DIR = 'datasets/STGAN_FaceShifter/fake'
-    INPUT_MASK_DIR = 'datasets/STGAN_FaceShifter/mask'
+    INPUT_IMAGE_DIR = 'datasets/STGAN_7k/fake'
+    INPUT_MASK_DIR = 'datasets/STGAN_7k/mask'
     
-    OUTPUT_BASE_DIR = 'datasets/data_split_STGAN_FaceShifter'
+    OUTPUT_BASE_DIR = 'datasets/data_split_STGAN_7k'
     
     split_dataset(
         image_dir=INPUT_IMAGE_DIR, 
@@ -122,5 +138,5 @@ if __name__ == '__main__':
         train_ratio=0.8,
         val_ratio=0.1, 
         test_ratio=0.1,
-        txt_file=None
+        txt_file='datasets/STGAN_7k/alllist_NIST.txt'
     )

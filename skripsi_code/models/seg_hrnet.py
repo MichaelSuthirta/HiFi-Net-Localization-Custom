@@ -421,7 +421,7 @@ class HighResolutionNet(nn.Module):
                     transition_layers.append(None)
             else:
                 conv3x3s = []
-                for j in range(i + 1 - num_branches_pre):
+                for j in range(i + 1 - num_branches_pre): 
                     inchannels = num_channels_pre_layer[-1]
                     outchannels = num_channels_cur_layer[i] \
                         if j == i - num_branches_pre else inchannels

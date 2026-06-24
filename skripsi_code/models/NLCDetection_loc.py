@@ -76,7 +76,7 @@ class NonLocalMask(nn.Module):
     def __init__(self, in_channels, reduce_scale):
         super(NonLocalMask, self).__init__()
 
-        self.r = reduce_scale
+        self.r = reduce_scale # RYxx: R buat biar ga terlalu berat performa non local attention, di sini r = 4
 
         # input channel number
         self.ic = in_channels * self.r * self.r
@@ -107,52 +107,69 @@ class NonLocalMask(nn.Module):
         self.Pconv_3 = PartialConv(3, 1, kernel_size=3, stride=2)
 
     def forward(self, x, img):
-        b, c, h, w = x.shape
+        b, c, h, w = x.shape #Ryxx: Batch, 64 (dr dimension HRNet kalo ga sala)
 
-        x1 = x.reshape(b, self.ic, h // self.r, w // self.r)
+        x1 = x.reshape(b, self.ic, h // self.r, w // self.r) # Ryxx: Udh rumus dari sananya buat simplify gambar dg preserve info, channel * r^2, w/r, h/r
+        # Ryxx: Nama rumusnya space to depth, dia nyimpen info2 gambar pake channel jd bs simplify
 
+        # Ryxx: x1 ini jadi b (batch size), (64*16), (256/4), (256/4) = (b, 1024, 64, 64)
+
+        # Ryxx: View, permute etc cuma manipulasi tensor, r itu kyk downsampling biar model lebi gampang process img
+        # Ryxx: Theta, phi, g > Q, K, V, ini udh dari sananya
         # g x
-        g_x = self.g(x1).view(b, self.ic, -1)
-        g_x = g_x.permute(0, 2, 1)
+        g_x = self.g(x1).view(b, self.ic, -1) #Ryxx: x1 => hasil reshape x. View itu ngeliat tensor dg info sama dan shape beda. -1 inferred from other dimensions
+        g_x = g_x.permute(0, 2, 1) # Ryxx: Inituh nukar letak position dg features
 
-        # theta
+        #####################################################
+        # Ryxx: Tau darimana perlu dituker? Liat di selanjutnya
+        # Bakal ada perkalian theta sama phi buat dapat f, yg bakal dikali g
+        # Pakai syarat perkalian matriks aja, col 1 = row 2
+        # mc itu input channel, jd 64 karena udh dr features dimension yg 64
+        #####################################################
+
+        # theta => 4096 x 1024
         theta_x = self.theta(x1).view(b, self.mc, -1)
         theta_x_s = theta_x.permute(0, 2, 1)
 
-        # phi x
+        # phi x => 1024 x 4096
         phi_x = self.phi(x1).view(b, self.mc, -1)
         phi_x_s = phi_x
 
         # non-local attention
-        f_s = torch.matmul(theta_x_s, phi_x_s)
-        f_s_div = F.softmax(f_s, dim=-1)
+        f_s = torch.matmul(theta_x_s, phi_x_s) #Ryxx: Matmul: Matrix multiply
+        f_s_div = F.softmax(f_s, dim=-1) # Ryxx: Ini buat attention weight nya
 
         # get y_s
         y_s = torch.matmul(f_s_div, g_x)
-        y_s = y_s.permute(0, 2, 1).contiguous()
+        y_s = y_s.permute(0, 2, 1).contiguous() # Biar peletakan memori dan value2nya posisinya contiguous
         y_s = y_s.view(b, c, h, w)
 
         # GX: (256,256,18), output mask for the deep metric loss.
-        mask_feat = x + self.gamma_s * self.W_s(y_s)
+        mask_feat = x + self.gamma_s * self.W_s(y_s) # Ryxx: Gamma > tensor, W > Layer convolution, jd nambahin feature baru aj ke x
 
         # get 1-dimensional mask_tmp
         # mask_binary = self.getmask(mask_feat)
-        mask_feat = self.conv_1(mask_feat)
+        mask_feat = self.conv_1(mask_feat) # Ryxx: Feature dimasukin ke layer lagi
         mask_binary = mask_feat
         mask_binary = self.relu(mask_binary)
         # print("mask_feat: ", mask_feat.size())  # torch.Size([4, 18, 256, 256])
-        mask_binary = self.conv_2(mask_binary)
+        mask_logits = self.conv_2(mask_binary) # Ryxx: Channel jd 1 karena ini udah nentuin manipulated/ngga
         # print("mask_binary: ", mask_binary.size())  # torch.Size([4, 1, 256, 256])
-        mask_binary = torch.sigmoid(mask_binary)
-        mask_tmp = mask_binary.repeat(1, 3, 1, 1)
+        mask_probs = torch.sigmoid(mask_logits) # Ryxx: Map between 0 and 1
+        mask_tmp = mask_probs.repeat(1, 3, 1, 1) # Ryxx: Ini repeat disimpen ke variabel!!!
         mask_img = img * mask_tmp # mask_img is the overlaid image.
+        # Ryxx: Inituh element wise multiply, dia ke value matrixnya. Mask_binary ttp 1 channel!
 
         ## conv output
         x, new_mask = self.Pconv_1(mask_img, mask_tmp)
         x, new_mask = self.Pconv_2(x, new_mask)
-        x, _        = self.Pconv_3(x, new_mask)
-        mask_binary = mask_binary.squeeze(dim=1)
-        return x, torch.sigmoid(mask_feat), mask_binary
+        x, _        = self.Pconv_3(x, new_mask) # Ryxx: Di init, ini out channel nya 1
+        mask_logits = mask_logits.squeeze(dim=1)
+        # Ryxx: Mask binary nya masih 4 1 256 256, trs disqueeze jd yg size nya 1 diilangin, jadilah 4 256 256
+        # x nya itu feature rep lagi, dr hasil conv jadi 4, 1, 31, 31 (ada rumusnya)
+        # mask_feat jg isinya feature, krn masuk ke conv1 jadinya 4, 18, 256, 256
+
+        return x, torch.sigmoid(mask_feat), mask_logits #Ryxx: Sampe sini udh dpt masknya tp masih blm dalam btk strict 0 1
 
 class Flatten(nn.Module):
     def __init__(self):
@@ -294,7 +311,7 @@ class NLCDetection(nn.Module):
         s1, s2, s3, s4 = self.feature_resize(feat)
         img = F.interpolate(img, size=self.crop_size, 
                             mode='bilinear', align_corners=True)
-
+        #Ryxx: Ini lokalisasinya
         feat_4 = self.FPN_LOC.smooth_s4(s4)
         feat_4 = self.FPN_LOC.fpn4(feat_4)   
         feat_3 = self.FPN_LOC.smooth_s3(s3)
@@ -308,6 +325,7 @@ class NLCDetection(nn.Module):
 
         pconv_1 = F.interpolate(pconv_feat, size=s1.size()[2:], mode='bilinear', align_corners=True)
 
+        # Ryxx: Ini klasifikasinya
         ## forth branch.
         cls_4, pro_4, _ = self.branch_cls_level_4(s4)
         cls_prob_4      = self.softmax_m(pro_4)

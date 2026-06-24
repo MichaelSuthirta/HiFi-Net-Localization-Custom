@@ -46,17 +46,17 @@ def train():
         # mask_dir='data-CASIA1/mask',
         # txt_dir='data-CASIA1/alllist.txt' if os.path.exists('data-NIST16/alllist.txt') else None
 
-        mask_dir='datasets/data_split_STGAN_FaceShifter/train/masks',
-        fake_dir='datasets/data_split_STGAN_FaceShifter/train/images',
+        mask_dir='datasets/data_split_STGAN_7k_Preprocessed/train/masks',
+        fake_dir='datasets/data_split_STGAN_7k_Preprocessed/train/images',
         is_train=True,
-        txt_dir='datasets/data_split_STGAN_FaceShifter/train/alllist.txt'
+        txt_dir='datasets/data_split_STGAN_7k_Preprocessed/train/alllist.txt'
     )
     dataloader = DataLoader(dataset, batch_size=4, shuffle=True, num_workers=2, drop_last=True)
 
     val_dataset = ForgeryDataset(
-        mask_dir='datasets/data_split_STGAN_FaceShifter/val/masks',
-        fake_dir='datasets/data_split_STGAN_FaceShifter/val/images',
-        txt_dir='datasets/data_split_STGAN_FaceShifter/val/alllist.txt'
+        mask_dir='datasets/data_split_STGAN_7k_Preprocessed/val/masks',
+        fake_dir='datasets/data_split_STGAN_7k_Preprocessed/val/images',
+        txt_dir='datasets/data_split_STGAN_7k_Preprocessed/val/alllist.txt'
     )
     val_dataloader = DataLoader(val_dataset, batch_size=4, shuffle=False, num_workers=2, drop_last=False)
 
@@ -84,7 +84,7 @@ def train():
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=10)
 
     # 4. Setup Losses
-    bce_loss_fn = nn.BCELoss()
+    bce_loss_fn = nn.BCEWithLogitsLoss()
     dice_loss_fn = DiceLoss()
     ce_loss_fn = nn.CrossEntropyLoss()
 
@@ -114,9 +114,12 @@ def train():
     if os.path.exists(checkpoint_path):
         print(f"Loading checkpoint from {checkpoint_path}...")
         checkpoint = torch.load(checkpoint_path, map_location=device)
-        FENet.load_state_dict(checkpoint['FENet_state_dict'])
-        SegNet.load_state_dict(checkpoint['SegNet_state_dict'])
-        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        FENet.load_state_dict(checkpoint['FENet_state_dict'], strict=False)
+        SegNet.load_state_dict(checkpoint['SegNet_state_dict'], strict=False)
+        try:
+            optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        except Exception as e:
+            print(f"Warning: Could not load optimizer state dict. Starting optimizer from scratch.")
         start_epoch = checkpoint['epoch'] + 1
         if 'best_val_f1' in checkpoint:
             best_val_f1 = checkpoint['best_val_f1']
@@ -161,7 +164,8 @@ def train():
             
             # Compute Training Metrics (detached to save memory)
             with torch.no_grad():
-                pred_mask = (mask_binary > 0.5).float()
+                prob_mask = torch.sigmoid(mask_binary)
+                pred_mask = (prob_mask > 0.5).float()
                 tp = torch.sum((pred_mask == 1) & (masks == 1)).item()
                 fp = torch.sum((pred_mask == 1) & (masks == 0)).item()
                 fn = torch.sum((pred_mask == 0) & (masks == 1)).item()
@@ -171,7 +175,7 @@ def train():
             
             # Compute Losses
             loss_bce_only = bce_loss_fn(mask_binary, masks)
-            loss_dice = dice_loss_fn(mask_binary, masks)
+            loss_dice = dice_loss_fn(prob_mask, masks)
             
             # BCE + Dice Loss mengatasi class imbalance
             loss_bce = loss_bce_only + loss_dice
@@ -226,7 +230,8 @@ def train():
                 features = FENet(images)
                 mask_feat, mask_binary, cls_4, cls_3, cls_2, cls_1 = SegNet(features, images)
                 
-                pred_mask = (mask_binary > 0.5).float()
+                prob_mask = torch.sigmoid(mask_binary)
+                pred_mask = (prob_mask > 0.5).float()
                 tp = torch.sum((pred_mask == 1) & (masks == 1)).item()
                 fp = torch.sum((pred_mask == 1) & (masks == 0)).item()
                 fn = torch.sum((pred_mask == 0) & (masks == 1)).item()
@@ -235,7 +240,7 @@ def train():
                 val_total_fn += fn
                 
                 loss_bce_only = bce_loss_fn(mask_binary, masks)
-                loss_dice = dice_loss_fn(mask_binary, masks)
+                loss_dice = dice_loss_fn(prob_mask, masks)
                 loss_bce = loss_bce_only + loss_dice
                 
                 if use_isolating_loss:
