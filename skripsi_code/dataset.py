@@ -6,12 +6,13 @@ import numpy as np
 import torch
 
 class ForgeryDataset(Dataset):
-    def __init__(self, fake_dir, mask_dir, txt_dir=None, crop_size=(256, 256), invert_mask=None):
+    def __init__(self, fake_dir, mask_dir, txt_dir=None, crop_size=(256, 256), invert_mask=None, is_train=False):
         super().__init__()
         self.fake_dir = fake_dir
         self.mask_dir = mask_dir
         self.crop_size = crop_size
         self.txt_dir = txt_dir
+        self.is_train = is_train
         
         if invert_mask is None:
             self.invert_mask = 'NIST16' in fake_dir or 'nist16' in fake_dir.lower()
@@ -37,7 +38,7 @@ class ForgeryDataset(Dataset):
             valid_extensions = ('.jpg', '.jpeg', '.png', '.bmp', '.tif', '.tiff')
             for file in os.listdir(fake_dir):
                 if file.lower().endswith(valid_extensions):
-                    basename, _ = os.path.splitext(file)
+                    basename, ext = os.path.splitext(file)
                     
                     # Possible mask filenames to check
                     possible_mask_names = [
@@ -47,11 +48,19 @@ class ForgeryDataset(Dataset):
                         f"{basename}_gt.jpg",
                         f"{basename}_gt.png",
                         f"{basename}_gt.jpeg",
+                        f"{basename}_mask.png",
                         f"{basename}.jpg",
                         f"{basename}.png",
                         f"{basename}.jpeg",
+                        f"mani_{basename}.png",
+                        f"mani_{basename}.jpg",
                         file  
                     ]
+                    
+                    # COVERAGE specific rule: 100t.tif -> 100forged.tif
+                    if basename.lower().endswith('t'):
+                        possible_mask_names.append(f"{basename[:-1]}forged.tif")
+                        possible_mask_names.append(f"{basename[:-1]}forged.png")
                     
                     mask_path = None
                     for mf in possible_mask_names:
@@ -106,6 +115,26 @@ class ForgeryDataset(Dataset):
         # Resize to typical model requirement (e.g. 256x256)
         image = image.resize(self.crop_size, Image.Resampling.BILINEAR)
         mask = mask.resize(self.crop_size, Image.Resampling.NEAREST)
+        
+        if self.is_train:
+            import random
+            import io
+            
+            # 1. Spatial Augmentations
+            if random.random() > 0.5:
+                image = F.hflip(image)
+                mask = F.hflip(mask)
+            if random.random() > 0.5:
+                image = F.vflip(image)
+                mask = F.vflip(mask)
+                
+            # 2. Compression Augmentation (Random JPEG Quality)
+            if random.random() > 0.5:
+                quality = random.randint(50, 100)
+                buffer = io.BytesIO()
+                image.save(buffer, format='JPEG', quality=quality)
+                buffer.seek(0)
+                image = Image.open(buffer).convert('RGB')
         
         # Convert to tensor. Image: [3,H,W] scaled to 0-1.
         image = F.to_tensor(image)

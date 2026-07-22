@@ -9,3 +9,4 @@ manipulated_data_NIST16
 datasets
 logs
 weights
+.DS_Store

@@ -66,46 +66,48 @@ def plot_metrics_with_val(csv_path='logs/metrics.csv', output_path='logs/metrics
         print("CSV is empty.")
         return
 
-    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+    # Daftar pasangan metrik (Train Column, Val Column, Title)
+    metrics_pairs = [
+        ('AvgLoss', 'ValLoss', 'Total Loss'),
+        ('AvgBCELoss', 'ValBCELoss', 'BCE Loss'),
+        ('Precision', 'ValPrecision', 'Precision'),
+        ('Recall', 'ValRecall', 'Recall'),
+        ('F1_Score', 'ValF1_Score', 'F1 Score'),
+        ('IoU', 'ValIoU', 'IoU'),
+        ('Dice', 'ValDice', 'Dice')
+    ]
+
+    # Bikin figure grid 4 baris x 2 kolom (total 8 subplot)
+    fig, axes = plt.subplots(4, 2, figsize=(15, 20))
+    axes = axes.flatten()
     
-    # --- Plot 1: Losses ---
-    axes[0].plot(df['Epoch'], df['AvgLoss'], marker='o', label='Train Total Loss', color='blue', linestyle='-')
-    axes[0].plot(df['Epoch'], df['AvgBCELoss'], marker='x', label='Train BCE Loss', color='lightblue', linestyle='--')
-    
-    # Gambar plot Validasi jika datanya ada (mengabaikan nilai None/NaN)
-    if not df['ValLoss'].isna().all():
-        # DropNa hanya untuk series yang digambar agar matplotlib tidak memotong garisnya
-        valid_val_data = df.dropna(subset=['ValLoss'])
-        axes[0].plot(valid_val_data['Epoch'], valid_val_data['ValLoss'], marker='s', label='Val Total Loss', color='red', linestyle='-')
-        axes[0].plot(valid_val_data['Epoch'], valid_val_data['ValBCELoss'], marker='^', label='Val BCE Loss', color='salmon', linestyle='--')
+    for i, (train_col, val_col, title) in enumerate(metrics_pairs):
+        ax = axes[i]
         
-    axes[0].set_title('Training & Validation Loss over Epochs')
-    axes[0].set_xlabel('Epoch')
-    axes[0].set_ylabel('Loss')
-    if len(df['Epoch']) <= 20:
-        axes[0].set_xticks(df['Epoch'])
-    axes[0].legend()
-    axes[0].grid(True)
-    
-    # --- Plot 2: Performance Metrics ---
-    # Metrik Train
-    axes[1].plot(df['Epoch'], df['F1_Score'], marker='o', label='Train F1 Score', color='blue')
-    axes[1].plot(df['Epoch'], df['IoU'], marker='x', label='Train IoU', color='lightblue')
-    
-    # Metrik Val
-    if not df['ValF1_Score'].isna().all():
-        valid_val_f1 = df.dropna(subset=['ValF1_Score'])
-        axes[1].plot(valid_val_f1['Epoch'], valid_val_f1['ValF1_Score'], marker='s', label='Val F1 Score', color='red')
-        axes[1].plot(valid_val_f1['Epoch'], valid_val_f1['ValIoU'], marker='^', label='Val IoU', color='salmon')
+        # Plot Metrik Train
+        ax.plot(df['Epoch'], df[train_col], marker='o', label=f'Train {title}', color='blue')
         
-    axes[1].set_title('Training & Validation Metrics over Epochs')
-    axes[1].set_xlabel('Epoch')
-    axes[1].set_ylabel('Score (0 to 1)')
-    if len(df['Epoch']) <= 20:
-        axes[1].set_xticks(df['Epoch'])
-    axes[1].set_ylim(0, 1.05)
-    axes[1].legend()
-    axes[1].grid(True)
+        # Plot Metrik Validasi jika datanya ada
+        if not df[val_col].isna().all():
+            valid_val_data = df.dropna(subset=[val_col])
+            ax.plot(valid_val_data['Epoch'], valid_val_data[val_col], marker='s', label=f'Val {title}', color='red')
+            
+        ax.set_title(f'Train vs Val: {title}')
+        ax.set_xlabel('Epoch')
+        ax.set_ylabel(title)
+        
+        if len(df['Epoch']) <= 20:
+            ax.set_xticks(df['Epoch'])
+            
+        # Batasi sumbu Y dari 0 sampai 1 untuk metrik performa (selain Loss)
+        if 'Loss' not in title:
+            ax.set_ylim(0, 1.05)
+            
+        ax.legend()
+        ax.grid(True)
+    
+    # Hapus subplot ke-8 karena kita cuma punya 7 pasang metrik
+    fig.delaxes(axes[7])
         
     plt.tight_layout()
     plt.savefig(output_path)
