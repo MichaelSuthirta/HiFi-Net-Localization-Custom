@@ -41,22 +41,53 @@ def train():
 
     # 1. Dataset & DataLoader
 
-    dataset = ForgeryDataset(
-        # fake_dir='data-CASIA1/fake',
-        # mask_dir='data-CASIA1/mask',
-        # txt_dir='data-CASIA1/alllist.txt' if os.path.exists('data-NIST16/alllist.txt') else None
+    import re
+    from collections import Counter
+    from torch.utils.data import WeightedRandomSampler
 
-        mask_dir='datasets/data_split_STGAN_FaceShifter/train/masks',
-        fake_dir='datasets/data_split_STGAN_FaceShifter/train/images',
-        is_train=True,
-        txt_dir='datasets/data_split_STGAN_FaceShifter/train/alllist.txt'
+    dataset = ForgeryDataset(
+        mask_dir='datasets/STGAN_7k_split/train/masks',
+        fake_dir='datasets/STGAN_7k_split/train/images',
+        txt_dir='datasets/STGAN_7k_split/train/alllist.txt',
+        is_train=True
     )
-    dataloader = DataLoader(dataset, batch_size=4, shuffle=True, num_workers=2, drop_last=True)
+    
+
+
+    #
+    # Dataset Balancing (for all-mixed datasets) -> Weighted Random Sampling
+    #
+    print("Calculating dataset weights for balancing...")
+    dataset_counts = Counter()
+    dataset_labels = []
+    
+    for img_path, _ in dataset.image_files:
+        basename = os.path.basename(img_path)
+        match = re.match(r'(.+)_\d+\.', basename)
+        if match:
+            ds_name = match.group(1)
+        else:
+            ds_name = basename.split('_')[0]
+        dataset_labels.append(ds_name)
+        dataset_counts[ds_name] += 1
+        
+    weights = []
+    for ds_name in dataset_labels:
+        # Inverse probability weighting
+        weights.append(1.0 / dataset_counts[ds_name])
+        
+    weights = torch.DoubleTensor(weights)
+    sampler = WeightedRandomSampler(weights, num_samples=len(weights), replacement=True)
+
+    dataloader = DataLoader(dataset, batch_size=4, sampler=sampler, num_workers=2, drop_last=True)
+
+
+
 
     val_dataset = ForgeryDataset(
-        mask_dir='datasets/data_split_STGAN_FaceShifter/val/masks',
-        fake_dir='datasets/data_split_STGAN_FaceShifter/val/images',
-        txt_dir='datasets/data_split_STGAN_FaceShifter/val/alllist.txt'
+        mask_dir='datasets/STGAN_7k_split/val/masks',
+        fake_dir='datasets/STGAN_7k_split/val/images',
+        txt_dir='datasets/STGAN_7k_split/val/alllist.txt'
     )
     val_dataloader = DataLoader(val_dataset, batch_size=4, shuffle=False, num_workers=2, drop_last=False)
 
@@ -80,11 +111,14 @@ def train():
 
     # 3. Setup Optimizers
     params = list(FENet.parameters()) + list(SegNet.parameters())
-    optimizer = torch.optim.Adam(params, lr=1e-4, weight_decay=1e-5)
+    # optimizer = torch.optim.Adam(params, lr=0.0001)
+    optimizer = torch.optim.Adam(params, lr=1e-3, weight_decay=1e-5)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=10)
 
+
     # 4. Setup Losses
-    bce_loss_fn = nn.BCELoss()
+    pos_weight = torch.tensor([4.0]).to(device)
+    bce_loss_fn = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
     dice_loss_fn = DiceLoss()
     ce_loss_fn = nn.CrossEntropyLoss()
 
@@ -101,10 +135,11 @@ def train():
         print("Precomputed center/radius not found, skipping Isolating Loss. (Using BCE only).")
 
     # 5. Training Loop
-    epochs = 200
+    epochs = 100
     start_epoch = 0
     checkpoint_path = 'weights/checkpoint.pth'
     best_val_f1 = 0.0
+    accumulation_steps = 2  # Gradient accumulation (bs 4 x 2 = effective bs 8)
     
     # Early Stopping variables
     patience = 30
@@ -114,14 +149,17 @@ def train():
     if os.path.exists(checkpoint_path):
         print(f"Loading checkpoint from {checkpoint_path}...")
         checkpoint = torch.load(checkpoint_path, map_location=device)
-        FENet.load_state_dict(checkpoint['FENet_state_dict'])
-        SegNet.load_state_dict(checkpoint['SegNet_state_dict'])
-        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        FENet.load_state_dict(checkpoint['FENet_state_dict'], strict=False)
+        SegNet.load_state_dict(checkpoint['SegNet_state_dict'], strict=False)
+        try:
+            optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        except Exception as e:
+            print(f"Warning: Could not load optimizer state dict. Starting optimizer from scratch.")
         start_epoch = checkpoint['epoch'] + 1
         if 'best_val_f1' in checkpoint:
             best_val_f1 = checkpoint['best_val_f1']
-        if 'scheduler_state_dict' in checkpoint:
-            scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+        # if 'scheduler_state_dict' in checkpoint:
+        #     scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
         if 'epochs_no_improve' in checkpoint:
             epochs_no_improve = checkpoint['epochs_no_improve']
         print(f"Resuming training from epoch {start_epoch + 1}")
@@ -147,21 +185,21 @@ def train():
         total_fp = 0
         total_fn = 0
         
-        pbar = tqdm(dataloader, desc=f"Epoch {epoch+1}/{epochs}")
-        for batch in pbar:
+        optimizer.zero_grad()
+        pbar = tqdm(enumerate(dataloader), total=len(dataloader), desc=f"Epoch {epoch+1}/{epochs}")
+        for i, batch in pbar:
             images = batch['image'].to(device)
-            masks = batch['mask'].to(device)     # GT Mask
+            masks = batch['mask'].to(device) 
             labels = batch['cls'].to(device)     
-            
-            optimizer.zero_grad()
             
             # Forward pass
             features = FENet(images)
-            mask_feat, mask_binary, cls_4, cls_3, cls_2, cls_1 = SegNet(features, images)
+            mask_feat, mask_binary = SegNet(features, images)
             
             # Compute Training Metrics (detached to save memory)
             with torch.no_grad():
-                pred_mask = (mask_binary > 0.5).float()
+                prob_mask = torch.sigmoid(mask_binary)
+                pred_mask = (prob_mask > 0.5).float()
                 tp = torch.sum((pred_mask == 1) & (masks == 1)).item()
                 fp = torch.sum((pred_mask == 1) & (masks == 0)).item()
                 fn = torch.sum((pred_mask == 0) & (masks == 1)).item()
@@ -171,27 +209,33 @@ def train():
             
             # Compute Losses
             loss_bce_only = bce_loss_fn(mask_binary, masks)
-            loss_dice = dice_loss_fn(mask_binary, masks)
+            loss_dice = dice_loss_fn(prob_mask, masks)
             
             # BCE + Dice Loss mengatasi class imbalance
-            loss_bce = loss_bce_only + loss_dice
+            loss_bce = loss_bce_only # + loss_dice (dimatikan sementara)
             
             if use_isolating_loss:
                 loss_metric, mani_loss, nat_loss = isolating_loss_fn(mask_feat, masks)
             else:
                 loss_metric = torch.tensor(0.0).to(device)
                 
-            loss_cls = ce_loss_fn(cls_1, labels) 
+            # loss_cls = ce_loss_fn(cls_1, labels) 
             
-            loss = loss_bce + loss_metric + 1e-4 * loss_cls
+            loss = loss_bce + loss_metric # + 1e-4 * loss_cls
+            
+            # Normalisasi loss untuk gradient accumulation
+            loss = loss / accumulation_steps
             
             # Backward pass
             loss.backward()
-            optimizer.step()
             
-            running_loss += loss.item()
+            if (i + 1) % accumulation_steps == 0 or (i + 1) == len(dataloader):
+                optimizer.step()
+                optimizer.zero_grad()
+            
+            running_loss += (loss.item() * accumulation_steps)
             running_bce += loss_bce.item()
-            pbar.set_postfix({'loss': f"{loss.item():.4f}", 'bce': f"{loss_bce.item():.4f}"})
+            pbar.set_postfix({'loss': f"{(loss.item() * accumulation_steps):.4f}", 'bce': f"{loss_bce.item():.4f}"})
             
         avg_loss = running_loss/len(dataloader)
         avg_bce = running_bce/len(dataloader)
@@ -224,9 +268,10 @@ def train():
                 labels = batch['cls'].to(device)     
                 
                 features = FENet(images)
-                mask_feat, mask_binary, cls_4, cls_3, cls_2, cls_1 = SegNet(features, images)
+                mask_feat, mask_binary = SegNet(features, images)
                 
-                pred_mask = (mask_binary > 0.5).float()
+                prob_mask = torch.sigmoid(mask_binary)
+                pred_mask = (prob_mask > 0.5).float()
                 tp = torch.sum((pred_mask == 1) & (masks == 1)).item()
                 fp = torch.sum((pred_mask == 1) & (masks == 0)).item()
                 fn = torch.sum((pred_mask == 0) & (masks == 1)).item()
@@ -235,16 +280,16 @@ def train():
                 val_total_fn += fn
                 
                 loss_bce_only = bce_loss_fn(mask_binary, masks)
-                loss_dice = dice_loss_fn(mask_binary, masks)
-                loss_bce = loss_bce_only + loss_dice
+                loss_dice = dice_loss_fn(prob_mask, masks)
+                loss_bce = loss_bce_only # + loss_dice (dimatikan sementara)
                 
                 if use_isolating_loss:
                     loss_metric, mani_loss, nat_loss = isolating_loss_fn(mask_feat, masks)
                 else:
                     loss_metric = torch.tensor(0.0).to(device)
                     
-                loss_cls = ce_loss_fn(cls_1, labels) 
-                loss = loss_bce + loss_metric + 1e-4 * loss_cls
+                # loss_cls = ce_loss_fn(cls_1, labels) 
+                loss = loss_bce + loss_metric # + 1e-4 * loss_cls
                 
                 val_running_loss += loss.item()
                 val_running_bce += loss_bce.item()
@@ -274,7 +319,7 @@ def train():
             'FENet_state_dict': FENet.state_dict(),
             'SegNet_state_dict': SegNet.state_dict(),
             'optimizer_state_dict': optimizer.state_dict(),
-            'scheduler_state_dict': scheduler.state_dict(),
+            # 'scheduler_state_dict': scheduler.state_dict(),
             'epochs_no_improve': epochs_no_improve,
             'loss': avg_loss,
             'best_val_f1': best_val_f1
@@ -291,7 +336,7 @@ def train():
             print(f"Early Stopping counter: {epochs_no_improve}/{patience}")
             
         # Step LR Scheduler
-        scheduler.step(val_f1_score)
+        # scheduler.step(val_f1_score)
         
         # Print Current LR
         current_lr = optimizer.param_groups[0]['lr']
@@ -310,9 +355,9 @@ def train():
         
         print(f"Checkpoint saved at epoch {epoch+1}")
         
-        if epochs_no_improve >= patience:
-            print("Early stopping triggered! Training stopped.")
-            break
+        # if epochs_no_improve >= patience:
+        #     print("Early stopping triggered! Training stopped.")
+        #     break
     print("Training finished! Saving weights...")
     os.makedirs('weights', exist_ok=True)
     torch.save(FENet.state_dict(), 'weights/FENet_latest.pth')

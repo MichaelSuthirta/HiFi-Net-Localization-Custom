@@ -24,9 +24,9 @@ def evaluate_and_visualize():
         # mask_dir='data-CASIA1/mask',
         # txt_dir='data-CASIA1/alllist.txt' if os.path.exists('data-NIST16/alllist.txt') else None
 
-        mask_dir='datasets/individual/CASIA1/test/masks',
-        fake_dir='datasets/individual/CASIA1/test/images',
-        txt_dir='datasets/individual/CASIA1/test/alllist.txt'
+        mask_dir='datasets/STGAN_7k_split/test/masks',
+        fake_dir='datasets/STGAN_7k_split/test/images',
+        txt_dir='datasets/STGAN_7k_split/test/alllist.txt',
     )
     dataloader = DataLoader(dataset, batch_size=1, shuffle=False)
 
@@ -63,10 +63,11 @@ def evaluate_and_visualize():
             
             # Forward pass
             features = FENet(images)
-            mask_feat, mask_binary, cls_4, cls_3, cls_2, cls_1 = SegNet(features, images)
+            mask_feat, mask_binary = SegNet(features, images)
             
-            # mask_binary is [B, 256, 256] from sigmoid layer. Threshold it > 0.5
-            pred_mask = (mask_binary > 0.5).float()
+            # mask_binary is [B, 256, 256] raw logits. Apply sigmoid then Threshold it > 0.5
+            prob_mask = torch.sigmoid(mask_binary)
+            pred_mask = (prob_mask > 0.5).float()
             
             # Calculate TP, FP, FN for current batch
             tp = torch.sum((pred_mask == 1) & (masks == 1)).item()
@@ -119,7 +120,7 @@ def evaluate_and_visualize():
             axes[1].set_title('Ground Truth Mask')
             axes[1].axis('off')
 
-            axes[2].imshow(mask_binary[0].detach().cpu().squeeze().numpy(), cmap='inferno')
+            axes[2].imshow(prob_mask[0].detach().cpu().squeeze().numpy(), cmap='inferno')
             axes[2].set_title('Raw Soft Mask (Heatmap)')
             axes[2].axis('off')
 
