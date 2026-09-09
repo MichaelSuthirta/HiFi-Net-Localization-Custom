@@ -103,6 +103,15 @@ class ForgeryDataset(Dataset):
             if random.random() > 0.5:
                 image = F.vflip(image)
                 mask = F.vflip(mask)
+                
+            # Random Translation (shift up to 20% off center to break spatial bias)
+            if random.random() > 0.5:
+                max_dx = int(self.crop_size[0] * 0.2)
+                max_dy = int(self.crop_size[1] * 0.2)
+                tx = random.randint(-max_dx, max_dx)
+                ty = random.randint(-max_dy, max_dy)
+                image = F.affine(image, angle=0.0, translate=[tx, ty], scale=1.0, shear=[0.0, 0.0])
+                mask = F.affine(mask, angle=0.0, translate=[tx, ty], scale=1.0, shear=[0.0, 0.0])
             
             # Random rotation (90, 180, 270 derajat)
             if random.random() > 0.5:
@@ -140,10 +149,14 @@ class ForgeryDataset(Dataset):
         
         do_invert = False
         if self.invert_mask == 'mixed':
-            if os.path.basename(img_path).startswith('NC'):
+            if os.path.basename(img_path).startswith('NC') or os.path.basename(img_path).startswith('NIST16'):
                 do_invert = True
         elif self.invert_mask:
             do_invert = True
+        else:
+            # Auto-detect NIST16 images from mixed datasets based on filename prefix
+            if os.path.basename(img_path).startswith('NIST16_'):
+                do_invert = True
             
         if do_invert:
             mask = 1.0 - mask

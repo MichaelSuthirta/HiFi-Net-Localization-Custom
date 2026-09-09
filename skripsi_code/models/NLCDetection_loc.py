@@ -291,11 +291,11 @@ class NLCDetection(nn.Module):
         self.getmask = NonLocalMask(feat_dim, 4)
         self.FPN_LOC = FPN_loc(feat_dim, multi_feat=FENet_cfg['STAGE4']['NUM_CHANNELS'])
 
-        ## classification branch.
-        self.branch_cls_level_1 = BranchCLS(317, 14)   # 252 + 64 = 316
-        self.branch_cls_level_2 = BranchCLS(252, 7)    # 144+72+36 = 252
-        self.branch_cls_level_3 = BranchCLS(216, 5)    # 144+72 = 216
-        self.branch_cls_level_4 = BranchCLS(144, 3)    # 144
+        ## classification branch. (Commented out to save VRAM and training time)
+        # self.branch_cls_level_1 = BranchCLS(317, 14)   # 252 + 64 = 316
+        # self.branch_cls_level_2 = BranchCLS(252, 7)    # 144+72+36 = 252
+        # self.branch_cls_level_3 = BranchCLS(216, 5)    # 144+72 = 216
+        # self.branch_cls_level_4 = BranchCLS(144, 3)    # 144
 
     def feature_resize(self, feat):
         '''first obtain the mask via the progressive scheme.'''
@@ -325,53 +325,53 @@ class NLCDetection(nn.Module):
 
         pconv_1 = F.interpolate(pconv_feat, size=s1.size()[2:], mode='bilinear', align_corners=True)
 
-        # Ryxx: Ini klasifikasinya
-        ## forth branch.
-        cls_4, pro_4, _ = self.branch_cls_level_4(s4)
-        cls_prob_4      = self.softmax_m(pro_4)
-        cls_prob_40 = torch.unsqueeze(cls_prob_4[:,0],1)
-        cls_prob_41 = torch.unsqueeze(cls_prob_4[:,1],1)
-        cls_prob_42 = torch.unsqueeze(cls_prob_4[:,2],1)
-        cls_prob_mask_3 = torch.cat([cls_prob_40, cls_prob_41, cls_prob_41, cls_prob_42, cls_prob_42],axis=1)
+        # Ryxx: Ini klasifikasinya (Commented out to save VRAM and training time)
+        # ## forth branch.
+        # cls_4, pro_4, _ = self.branch_cls_level_4(s4)
+        # cls_prob_4      = self.softmax_m(pro_4)
+        # cls_prob_40 = torch.unsqueeze(cls_prob_4[:,0],1)
+        # cls_prob_41 = torch.unsqueeze(cls_prob_4[:,1],1)
+        # cls_prob_42 = torch.unsqueeze(cls_prob_4[:,2],1)
+        # cls_prob_mask_3 = torch.cat([cls_prob_40, cls_prob_41, cls_prob_41, cls_prob_42, cls_prob_42],axis=1)
 
-        ## third branch
-        s4F = F.interpolate(s4, size=s3.size()[2:], mode='bilinear', align_corners=True)
-        s3_input = torch.cat([s4F, s3], axis=1)
-        cls_3, pro_3, _ = self.branch_cls_level_3(s3_input)
-        cls_prob_3      = self.softmax_m(pro_3)
-        cls_3 = cls_3 + cls_3 * cls_prob_mask_3
-        cls_prob_30 = torch.unsqueeze(cls_prob_3[:,0],1)
-        cls_prob_31 = torch.unsqueeze(cls_prob_3[:,1],1)
-        cls_prob_32 = torch.unsqueeze(cls_prob_3[:,2],1)
-        cls_prob_33 = torch.unsqueeze(cls_prob_3[:,3],1)
-        cls_prob_34 = torch.unsqueeze(cls_prob_3[:,4],1)
-        cls_prob_mask_2 = torch.cat([cls_prob_30, cls_prob_31, cls_prob_31, 
-                                     cls_prob_32, cls_prob_32,
-                                     cls_prob_33, cls_prob_34],axis=1)
+        # ## third branch
+        # s4F = F.interpolate(s4, size=s3.size()[2:], mode='bilinear', align_corners=True)
+        # s3_input = torch.cat([s4F, s3], axis=1)
+        # cls_3, pro_3, _ = self.branch_cls_level_3(s3_input)
+        # cls_prob_3      = self.softmax_m(pro_3)
+        # cls_3 = cls_3 + cls_3 * cls_prob_mask_3
+        # cls_prob_30 = torch.unsqueeze(cls_prob_3[:,0],1)
+        # cls_prob_31 = torch.unsqueeze(cls_prob_3[:,1],1)
+        # cls_prob_32 = torch.unsqueeze(cls_prob_3[:,2],1)
+        # cls_prob_33 = torch.unsqueeze(cls_prob_3[:,3],1)
+        # cls_prob_34 = torch.unsqueeze(cls_prob_3[:,4],1)
+        # cls_prob_mask_2 = torch.cat([cls_prob_30, cls_prob_31, cls_prob_31, 
+        #                              cls_prob_32, cls_prob_32,
+        #                              cls_prob_33, cls_prob_34],axis=1)
 
-        ## second branch
-        s3F = F.interpolate(s3_input, size=s2.size()[2:], mode='bilinear', align_corners=True)
-        s2_input = torch.cat([s3F, s2], axis=1)
-        cls_2, pro_2, _ = self.branch_cls_level_2(s2_input) 
-        cls_prob_2      = self.softmax_m(pro_2)
-        cls_2 = cls_2 + cls_2 * cls_prob_mask_2
-        cls_prob_20 = torch.unsqueeze(cls_prob_2[:,0],1)
-        cls_prob_21 = torch.unsqueeze(cls_prob_2[:,1],1)
-        cls_prob_22 = torch.unsqueeze(cls_prob_2[:,2],1)
-        cls_prob_23 = torch.unsqueeze(cls_prob_2[:,3],1)
-        cls_prob_24 = torch.unsqueeze(cls_prob_2[:,4],1)
-        cls_prob_25 = torch.unsqueeze(cls_prob_2[:,4],1)
-        cls_prob_26 = torch.unsqueeze(cls_prob_2[:,4],1)
-        cls_prob_mask_1 = torch.cat([cls_prob_20, 
-                                     cls_prob_21, cls_prob_21, cls_prob_22, cls_prob_22,    # 4 diffusion
-                                     cls_prob_23, cls_prob_23, cls_prob_24, cls_prob_24,    # 4 gan
-                                     cls_prob_25, cls_prob_25,                              # faceshifter+stgan
-                                     cls_prob_26, cls_prob_26, cls_prob_26], axis=1)        # 3 editing
+        # ## second branch
+        # s3F = F.interpolate(s3_input, size=s2.size()[2:], mode='bilinear', align_corners=True)
+        # s2_input = torch.cat([s3F, s2], axis=1)
+        # cls_2, pro_2, _ = self.branch_cls_level_2(s2_input) 
+        # cls_prob_2      = self.softmax_m(pro_2)
+        # cls_2 = cls_2 + cls_2 * cls_prob_mask_2
+        # cls_prob_20 = torch.unsqueeze(cls_prob_2[:,0],1)
+        # cls_prob_21 = torch.unsqueeze(cls_prob_2[:,1],1)
+        # cls_prob_22 = torch.unsqueeze(cls_prob_2[:,2],1)
+        # cls_prob_23 = torch.unsqueeze(cls_prob_2[:,3],1)
+        # cls_prob_24 = torch.unsqueeze(cls_prob_2[:,4],1)
+        # cls_prob_25 = torch.unsqueeze(cls_prob_2[:,4],1)
+        # cls_prob_26 = torch.unsqueeze(cls_prob_2[:,4],1)
+        # cls_prob_mask_1 = torch.cat([cls_prob_20, 
+        #                              cls_prob_21, cls_prob_21, cls_prob_22, cls_prob_22,    # 4 diffusion
+        #                              cls_prob_23, cls_prob_23, cls_prob_24, cls_prob_24,    # 4 gan
+        #                              cls_prob_25, cls_prob_25,                              # faceshifter+stgan
+        #                              cls_prob_26, cls_prob_26, cls_prob_26], axis=1)        # 3 editing
 
-        s2F = F.interpolate(s2_input, size=s1.size()[2:], mode='bilinear', align_corners=True)
-        s1_input = torch.cat([s2F, s1, pconv_1], axis=1)
-        cls_1, pro_1, _ = self.branch_cls_level_1(s1_input) 
-        cls_1 = cls_1 + cls_1 * cls_prob_mask_1
+        # s2F = F.interpolate(s2_input, size=s1.size()[2:], mode='bilinear', align_corners=True)
+        # s1_input = torch.cat([s2F, s1, pconv_1], axis=1)
+        # cls_1, pro_1, _ = self.branch_cls_level_1(s1_input) 
+        # cls_1 = cls_1 + cls_1 * cls_prob_mask_1
 
         mask = mask.squeeze(dim=1)
-        return mask, mask_binary, cls_4, cls_3, cls_2, cls_1
+        return mask, mask_binary

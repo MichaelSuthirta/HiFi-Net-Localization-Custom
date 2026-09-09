@@ -24,9 +24,9 @@ def evaluate_and_visualize():
         # mask_dir='data-CASIA1/mask',
         # txt_dir='data-CASIA1/alllist.txt' if os.path.exists('data-NIST16/alllist.txt') else None
 
-        mask_dir='datasets/data_split_NIST16_IMD/test/masks',
-        fake_dir='datasets/data_split_NIST16_IMD/test/images',
-        txt_dir='datasets/data_split_NIST16_IMD/test/alllist.txt'
+        mask_dir='datasets/STGAN_7k_split/test/masks',
+        fake_dir='datasets/STGAN_7k_split/test/images',
+        txt_dir='datasets/STGAN_7k_split/test/alllist.txt',
     )
     dataloader = DataLoader(dataset, batch_size=1, shuffle=False)
 
@@ -63,7 +63,7 @@ def evaluate_and_visualize():
             
             # Forward pass
             features = FENet(images)
-            mask_feat, mask_binary, cls_4, cls_3, cls_2, cls_1 = SegNet(features, images)
+            mask_feat, mask_binary = SegNet(features, images)
             
             # mask_binary is [B, 256, 256] raw logits. Apply sigmoid then Threshold it > 0.5
             prob_mask = torch.sigmoid(mask_binary)

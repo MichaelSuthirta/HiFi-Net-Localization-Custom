@@ -129,14 +129,14 @@ if __name__ == '__main__':
     INPUT_IMAGE_DIR = 'datasets/STGAN_7k/fake'
     INPUT_MASK_DIR = 'datasets/STGAN_7k/mask'
     
-    OUTPUT_BASE_DIR = 'datasets/data_split_STGAN_7k'
+    OUTPUT_BASE_DIR = 'datasets/STGAN_7k_split'
     
     split_dataset(
         image_dir=INPUT_IMAGE_DIR, 
         mask_dir=INPUT_MASK_DIR, 
         output_dir=OUTPUT_BASE_DIR,
-        train_ratio=0.8,
-        val_ratio=0.1, 
+        train_ratio=0.7,
+        val_ratio=0.2, 
         test_ratio=0.1,
-        txt_file='datasets/STGAN_7k/alllist_NIST.txt'
+        txt_file=None
     )

@@ -113,12 +113,12 @@ def train():
     params = list(FENet.parameters()) + list(SegNet.parameters())
     # optimizer = torch.optim.Adam(params, lr=0.0001)
     optimizer = torch.optim.Adam(params, lr=1e-3, weight_decay=1e-5)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=10)
+    # scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=10)
 
 
     # 4. Setup Losses
-    pos_weight = torch.tensor([4.0]).to(device)
-    bce_loss_fn = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+    pos_weight = torch.tensor([3.0]).to(device)
+    bce_loss_fn = nn.BCEWithLogitsLoss()
     dice_loss_fn = DiceLoss()
     ce_loss_fn = nn.CrossEntropyLoss()
 
@@ -135,15 +135,15 @@ def train():
         print("Precomputed center/radius not found, skipping Isolating Loss. (Using BCE only).")
 
     # 5. Training Loop
-    epochs = 100
+    epochs = 50
     start_epoch = 0
     checkpoint_path = 'weights/checkpoint.pth'
     best_val_f1 = 0.0
-    accumulation_steps = 2  # Gradient accumulation (bs 4 x 2 = effective bs 8)
+    accumulation_steps = 1  # Gradient accumulation (bs 4 x 1 = effective bs 4)
     
-    # Early Stopping variables
-    patience = 30
-    epochs_no_improve = 0
+    # Early Stopping variables (Removed)
+    # patience = 30
+    # epochs_no_improve = 0
 
     # Load checkpoint jika ada
     if os.path.exists(checkpoint_path):
@@ -160,8 +160,8 @@ def train():
             best_val_f1 = checkpoint['best_val_f1']
         # if 'scheduler_state_dict' in checkpoint:
         #     scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
-        if 'epochs_no_improve' in checkpoint:
-            epochs_no_improve = checkpoint['epochs_no_improve']
+        # if 'epochs_no_improve' in checkpoint:
+        #     epochs_no_improve = checkpoint['epochs_no_improve']
         print(f"Resuming training from epoch {start_epoch + 1}")
     else:
         print("No checkpoint found. Starting from scratch.")
@@ -212,7 +212,7 @@ def train():
             loss_dice = dice_loss_fn(prob_mask, masks)
             
             # BCE + Dice Loss mengatasi class imbalance
-            loss_bce = loss_bce_only # + loss_dice (dimatikan sementara)
+            loss_bce = loss_bce_only  + loss_dice
             
             if use_isolating_loss:
                 loss_metric, mani_loss, nat_loss = isolating_loss_fn(mask_feat, masks)
@@ -320,20 +320,16 @@ def train():
             'SegNet_state_dict': SegNet.state_dict(),
             'optimizer_state_dict': optimizer.state_dict(),
             # 'scheduler_state_dict': scheduler.state_dict(),
-            'epochs_no_improve': epochs_no_improve,
+            # 'epochs_no_improve': epochs_no_improve,
             'loss': avg_loss,
             'best_val_f1': best_val_f1
         }, checkpoint_path)
         
         if val_f1_score > best_val_f1:
             best_val_f1 = val_f1_score
-            epochs_no_improve = 0
             torch.save(FENet.state_dict(), 'weights/FENet_best.pth')
             torch.save(SegNet.state_dict(), 'weights/SegNet_best.pth')
             print(f"*** New Best Model Saved (Val F1: {best_val_f1:.4f}) ***")
-        else:
-            epochs_no_improve += 1
-            print(f"Early Stopping counter: {epochs_no_improve}/{patience}")
             
         # Step LR Scheduler
         # scheduler.step(val_f1_score)
