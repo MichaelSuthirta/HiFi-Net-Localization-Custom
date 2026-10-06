@@ -21,7 +21,7 @@ def add_social_media_noise(img):
     noisy_img = noisy_img.filter(ImageFilter.GaussianBlur(radius=0.3))
     return noisy_img
 
-def manipulate_image(input_path, output_path, scale_factor=0.5, jpeg_quality=60, chain_saves=3):
+def manipulate_image(input_path, output_path, scale_factor=0.9, jpeg_quality=10, chain_saves=10):
     """
     Melakukan manipulasi resolusi dan kompresi lossy berantai (Generation Loss).
     Simulasi kompresi sosial media berantai (misal: di-forward berkali-kali di WhatsApp).
@@ -30,7 +30,7 @@ def manipulate_image(input_path, output_path, scale_factor=0.5, jpeg_quality=60,
         img = Image.open(input_path)
         if img.mode in ('RGBA', 'P'):
             img = img.convert('RGB')
-            
+             
         orig_size = img.size
         
         # 1. Resolusi awal jika ada downscaling
@@ -98,9 +98,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Simulasi Generation Loss (di-forward berkali-kali).")
     parser.add_argument("-i", "--input_dir", type=str, required=True, help="Direktori asal gambar.")
     parser.add_argument("-o", "--output_dir", type=str, default="manipulated_data", help="Direktori tujuan.")
-    parser.add_argument("-s", "--scale_factor", type=float, default=0.5, help="Faktor downsampling resolusi.")
-    parser.add_argument("-q", "--quality", type=int, default=10, help="Kualitas kompresi JPEG per rantai (1-100).")
-    parser.add_argument("-c", "--chain_saves", type=int, default=5, help="Jumlah gambar di-save ulang/di-forward. Semakin banyak, semakin hancur noise khasnya.")
+    parser.add_argument("-s", "--scale_factor", type=float, default=0.8, help="Faktor downsampling resolusi.")
+    parser.add_argument("-q", "--quality", type=int, default=80, help="Kualitas kompresi JPEG per rantai (1-100).")
+    parser.add_argument("-c", "--chain_saves", type=int, default=10, help="Jumlah gambar di-save ulang/di-forward. Semakin banyak, semakin hancur noise khasnya.")
     
     args = parser.parse_args()
     process_directory(args.input_dir, args.output_dir, args.scale_factor, args.quality, args.chain_saves)

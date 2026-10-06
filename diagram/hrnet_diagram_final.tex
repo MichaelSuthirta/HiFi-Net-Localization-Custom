@@ -1,0 +1,107 @@
+\documentclass[border=8pt, multi, tikz]{standalone} 
+\usepackage{import}
+\subimport{./}{init}
+
+\usetikzlibrary{positioning}
+\def\ConvColor{rgb:yellow,5;red,2.5;white,5}
+\def\ConvReluColor{rgb:yellow,5;red,5;white,5}
+\def\PoolColor{rgb:red,1;black,0.3}
+\def\FreqColor{rgb:green,3;yellow,1;black,0.3}
+\def\FcColor{rgb:blue,5;red,2.5;white,5}
+\def\SoftmaxColor{rgb:magenta,5;black,7}
+\def\BnColor{rgb:black,2;white,8}
+\def\ReluColor{rgb:red,5;white,5}
+\def\edgecolor{rgb:blue,4;red,1;green,1;black,3}
+\newcommand{\copymidarrow}{\tikz \draw[-Stealth,line width=0.8mm,draw={rgb:blue,4;red,1;green,1;black,3}] (-0.3,0) -- ++(0.3,0);}
+
+\begin{document}
+\begin{tikzpicture}
+\tikzstyle{connection}=[ultra thick,every node/.style={sloped,allow upside down},draw=\edgecolor,opacity=0.7]
+
+% 1. Input Box
+\pic[shift={(0,0,0)}] at (0,0,0) {Box={name=input,caption=Input,xlabel=3,zlabel=256,fill=\FcColor,height=32,width=2,depth=32}};
+
+% ================= FREQUENCY BRANCH (ATAS) =================
+% conv1fre -> bn1fre -> relu -> laplacian -> conv2fre -> bn2fre -> relu
+\pic[shift={(1.5, 6, 0)}] at (input-east) {Box={name=fc1,caption=conv1fre,xlabel=64,zlabel=256,fill=\ConvColor,height=32,width=3,depth=32}};
+\pic[shift={(0.5, 0, 0)}] at (fc1-east) {Box={name=fb1,caption=bn1fre,fill=\BnColor,height=32,width=1,depth=32}};
+\pic[shift={(0.5, 0, 0)}] at (fb1-east) {Box={name=fr1,caption=relu,fill=\ReluColor,height=32,width=1,depth=32}};
+\pic[shift={(0.5, 0, 0)}] at (fr1-east) {Box={name=flap,caption=laplacian,fill=\FreqColor,height=32,width=4,depth=32}};
+\pic[shift={(0.5, 0, 0)}] at (flap-east) {Box={name=fc2,caption=conv2fre,xlabel=64,zlabel=256,fill=\ConvColor,height=32,width=3,depth=32}};
+\pic[shift={(0.5, 0, 0)}] at (fc2-east) {Box={name=fb2,caption=bn2fre,fill=\BnColor,height=32,width=1,depth=32}};
+\pic[shift={(0.5, 0, 0)}] at (fb2-east) {Box={name=fr2,caption=relu,fill=\ReluColor,height=32,width=1,depth=32}};
+
+% ================= RGB STEM NET (BAWAH) =================
+% bn1 -> relu -> conv2 -> bn2 -> relu
+\pic[shift={(1.5, -6, 0)}] at (input-east) {Box={name=sb1,caption=bn1,fill=\BnColor,height=32,width=1,depth=32}};
+\pic[shift={(0.5, 0, 0)}] at (sb1-east) {Box={name=sr1,caption=relu,fill=\ReluColor,height=32,width=1,depth=32}};
+\pic[shift={(0.5, 0, 0)}] at (sr1-east) {Box={name=sc2,caption=conv2,xlabel=64,zlabel=256,fill=\ConvColor,height=32,width=3,depth=32}};
+\pic[shift={(0.5, 0, 0)}] at (sc2-east) {Box={name=sb2,caption=bn2,fill=\BnColor,height=32,width=1,depth=32}};
+\pic[shift={(0.5, 0, 0)}] at (sb2-east) {Box={name=sr2,caption=relu,fill=\ReluColor,height=32,width=1,depth=32}};
+
+% ================= MERGE =================
+\pic[shift={(1.5, -6, 0)}] at (fr2-east) {Box={name=merge,caption=\shortstack{concat\\+ conv\_1x1},xlabel=128,zlabel=256,fill=\PoolColor,height=32,width=4,depth=32}};
+
+% ================= STAGE 1 =================
+\pic[shift={(1.5, 0, 0)}] at (merge-east) {RightBandedBox={name=s1,caption=Stage 1,xlabel=256,zlabel=256,fill=\ConvColor,bandfill=\ConvReluColor,height=32,width=8,depth=32}};
+
+% ================= STAGE 2 =================
+\pic[shift={(2, 0, 0)}] at (s1-east) {RightBandedBox={name=s2_1,caption=Stage 2,xlabel=18,zlabel=256,fill=\ConvColor,bandfill=\ConvReluColor,height=32,width=4,depth=32}};
+\pic[shift={(0, -5, 0)}] at (s2_1-south) {RightBandedBox={name=s2_2,xlabel=36,zlabel=128,fill=\ConvColor,bandfill=\ConvReluColor,height=16,width=5,depth=16}};
+
+% ================= STAGE 3 =================
+\pic[shift={(2, 0, 0)}] at (s2_1-east) {RightBandedBox={name=s3_1,caption=Stage 3,xlabel=18,zlabel=256,fill=\ConvColor,bandfill=\ConvReluColor,height=32,width=4,depth=32}};
+\pic[shift={(2, 0, 0)}] at (s2_2-east) {RightBandedBox={name=s3_2,xlabel=36,zlabel=128,fill=\ConvColor,bandfill=\ConvReluColor,height=16,width=5,depth=16}};
+\pic[shift={(0, -4, 0)}] at (s3_2-south) {RightBandedBox={name=s3_3,xlabel=72,zlabel=64,fill=\ConvColor,bandfill=\ConvReluColor,height=8,width=6,depth=8}};
+
+% ================= STAGE 4 =================
+\pic[shift={(2, 0, 0)}] at (s3_1-east) {RightBandedBox={name=s4_1,caption=Stage 4,xlabel=18,zlabel=256,fill=\ConvColor,bandfill=\ConvReluColor,height=32,width=4,depth=32}};
+\pic[shift={(2, 0, 0)}] at (s3_2-east) {RightBandedBox={name=s4_2,xlabel=36,zlabel=128,fill=\ConvColor,bandfill=\ConvReluColor,height=16,width=5,depth=16}};
+\pic[shift={(2, 0, 0)}] at (s3_3-east) {RightBandedBox={name=s4_3,xlabel=72,zlabel=64,fill=\ConvColor,bandfill=\ConvReluColor,height=8,width=6,depth=8}};
+\pic[shift={(0, -3.5, 0)}] at (s4_3-south) {RightBandedBox={name=s4_4,xlabel=144,zlabel=32,fill=\ConvColor,bandfill=\ConvReluColor,height=4,width=8,depth=4}};
+
+% ================= OUTPUT =================
+\pic[shift={(2, 0, 0)}] at (s4_1-east) {Box={name=out,caption=Output,xlabel=Mask,zlabel=256,fill=\SoftmaxColor,height=32,width=3,depth=32}};
+
+% ================= CONNECTIONS =================
+\draw [connection] (input-east) -- node {\copymidarrow} (fc1-west);
+\draw [connection] (fc1-east) -- (fb1-west);
+\draw [connection] (fb1-east) -- (fr1-west);
+\draw [connection] (fr1-east) -- (flap-west);
+\draw [connection] (flap-east) -- (fc2-west);
+\draw [connection] (fc2-east) -- (fb2-west);
+\draw [connection] (fb2-east) -- (fr2-west);
+
+\draw [connection] (input-east) -- node {\copymidarrow} (sb1-west);
+\draw [connection] (sb1-east) -- (sr1-west);
+\draw [connection] (sr1-east) -- (sc2-west);
+\draw [connection] (sc2-east) -- (sb2-west);
+\draw [connection] (sb2-east) -- (sr2-west);
+
+\draw [connection] (fr2-east) -- node {\copymidarrow} (merge-west);
+\draw [connection] (sr2-east) -- node {\copymidarrow} (merge-west);
+
+\draw [connection] (merge-east) -- node {\copymidarrow} (s1-west);
+
+\draw [connection] (s1-east) -- node {\copymidarrow} (s2_1-west);
+\draw [connection] (s1-east) -- node {\copymidarrow} (s2_2-west);
+
+\draw [connection] (s2_1-east) -- node {\copymidarrow} (s3_1-west);
+\draw [connection] (s2_1-east) -- node {\copymidarrow} (s3_2-west);
+\draw [connection] (s2_2-east) -- node {\copymidarrow} (s3_2-west);
+\draw [connection] (s2_2-east) -- node {\copymidarrow} (s3_3-west);
+
+\draw [connection] (s3_1-east) -- node {\copymidarrow} (s4_1-west);
+\draw [connection] (s3_1-east) -- node {\copymidarrow} (s4_2-west);
+\draw [connection] (s3_2-east) -- node {\copymidarrow} (s4_2-west);
+\draw [connection] (s3_2-east) -- node {\copymidarrow} (s4_3-west);
+\draw [connection] (s3_3-east) -- node {\copymidarrow} (s4_3-west);
+\draw [connection] (s3_3-east) -- node {\copymidarrow} (s4_4-west);
+
+\draw [connection] (s4_1-east) -- node {\copymidarrow} (out-west);
+\draw [connection] (s4_2-east) -- node {\copymidarrow} (out-west);
+\draw [connection] (s4_3-east) -- node {\copymidarrow} (out-west);
+\draw [connection] (s4_4-east) -- node {\copymidarrow} (out-west);
+
+\end{tikzpicture}
+\end{document}

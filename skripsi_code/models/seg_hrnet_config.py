@@ -50,7 +50,7 @@ HRNET.STAGE4.BLOCK = 'BASIC'
 HRNET.STAGE4.FUSE_METHOD = 'SUM'
 
 
-def get_cfg_defaults():
+def get_cfg_defaults(): 
   """Get a yacs CfgNode object with default values for my_project."""
   # Return a clone so that the defaults will not be altered
   # This is for the "local variable" use pattern
