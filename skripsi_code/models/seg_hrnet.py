@@ -9,6 +9,7 @@ from __future__ import division
 from __future__ import print_function
 from .LaPlacianMs import LaPlacianMs
 from .NLCDetection_loc import weights_init
+from sobel_edgeDetection.Sobel import Sobel
 
 import os
 import logging
@@ -395,6 +396,10 @@ class HighResolutionNet(nn.Module):
 
         last_inp_channels = int(np.sum(pre_stage_channels))
 
+        # =============== New addition: Try out Sobel edge detection ===========================
+        self.sobel = Sobel() # This has parameter of input channel, but already 64 as default
+
+
     ## GX: one dimension matrix converts pre to pos.
     ## GX: if channel numbers are equal, pass it directly.
     ## GX: if channel numbers are different, using conv 3x3.
@@ -483,7 +488,13 @@ class HighResolutionNet(nn.Module):
         x_fre = self.conv1fre(x)
         x_fre = self.bn1fre(x_fre)
         x_fre = self.relu(x_fre)
+
+        '''
+        Below there is LoG and Sobel, just switch the comments to change
+        '''
+
         x_fre = self.laplacian(x_fre)
+        # x_fre = self.sobel(x_fre) 
         x_fre = self.conv2fre(x_fre)
         x_fre = self.bn2fre(x_fre)
         x_fre = self.relu(x_fre)
