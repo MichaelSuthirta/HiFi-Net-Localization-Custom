@@ -101,45 +101,44 @@ def train():
     FENet = get_seg_model(cfg).to(device)
     SegNet = NLCDetection().to(device)
     
-    # if os.path.exists('weights/FENet_modal_awal.pth'):
-    #     FENet.load_state_dict(torch.load('weights/FENet_modal_awal.pth', map_location=device))
-    #     print("FENet weights loaded.")
-    #     SegNet.load_state_dict(torch.load('weights/SegNet_modal_awal.pth', map_location=device))
-    #     print("SegNet weights loaded.")
-    # else:
-    #     print("No weights found for FENet and SegNet. Training from scratch.")
+    if os.path.exists('weights/FENet_modal_awal.pth'):
+        FENet.load_state_dict(torch.load('weights/FENet_modal_awal.pth', map_location=device), strict=False)
+        print("FENet weights loaded.")
+        SegNet.load_state_dict(torch.load('weights/SegNet_modal_awal.pth', map_location=device), strict=False)
+        print("SegNet weights loaded.")
+    else:
+        print("No weights found for FENet and SegNet. Training from scratch.")
 
     # 3. Setup Optimizers
     params = list(FENet.parameters()) + list(SegNet.parameters())
     # optimizer = torch.optim.Adam(params, lr=0.0001)
-    optimizer = torch.optim.Adam(params, lr=1e-3, weight_decay=1e-5)
+    optimizer = torch.optim.Adam(params, lr=1e-4, weight_decay=1e-5)
     # scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=10)
 
 
     # 4. Setup Losses
-    pos_weight = torch.tensor([4.0]).to(device)
-    bce_loss_fn = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+    # pos_weight = torch.tensor([4.0]).to(device)
+    bce_loss_fn = nn.BCEWithLogitsLoss()
     dice_loss_fn = DiceLoss()
     ce_loss_fn = nn.CrossEntropyLoss()
 
     use_isolating_loss = False
     center_path = './center_loc/radius_center.pth'
-    if os.path.exists(center_path):
+    if use_isolating_loss and os.path.exists(center_path):
         print(f"Loading precomputed center and radius from {center_path}")
         ckpt = torch.load(center_path, map_location=device)
         center = ckpt['center'].to(device)
         radius = ckpt['radius'].to(device)
         isolating_loss_fn = IsolatingLossFunction(center, radius)
-        use_isolating_loss = True
     else:
-        print("Precomputed center/radius not found, skipping Isolating Loss. (Using BCE only).")
+        print("Isolating Loss is disabled. Training with BCE + Dice Loss.")
 
     # 5. Training Loop
     epochs = 50
     start_epoch = 0
     checkpoint_path = 'weights/checkpoint.pth'
     best_val_f1 = 0.0
-    accumulation_steps = 1  # Gradient accumulation (bs 4 x 1 = effective bs 4)
+    accumulation_steps = 4  # Gradient accumulation (bs 4 x 1 = effective bs 4)
     
     # Early Stopping variables (Removed)
     # patience = 30
@@ -196,9 +195,18 @@ def train():
             features = FENet(images)
             mask_feat, mask_binary = SegNet(features, images)
             
+            # Compute prob_mask with gradients for Dice Loss
+            prob_mask = torch.sigmoid(mask_binary)
+            
+            # Compute Losses
+            loss_bce_only = bce_loss_fn(mask_binary, masks)
+            loss_dice = dice_loss_fn(prob_mask, masks)
+            
+            # BCE + Dice Loss mengatasi class imbalance
+            loss_bce = loss_bce_only + loss_dice
+            
             # Compute Training Metrics (detached to save memory)
             with torch.no_grad():
-                prob_mask = torch.sigmoid(mask_binary)
                 pred_mask = (prob_mask > 0.5).float()
                 tp = torch.sum((pred_mask == 1) & (masks == 1)).item()
                 fp = torch.sum((pred_mask == 1) & (masks == 0)).item()
@@ -206,13 +214,6 @@ def train():
                 total_tp += tp
                 total_fp += fp
                 total_fn += fn
-            
-            # Compute Losses
-            loss_bce_only = bce_loss_fn(mask_binary, masks)
-            loss_dice = dice_loss_fn(prob_mask, masks)
-            
-            # BCE + Dice Loss mengatasi class imbalance
-            loss_bce = loss_bce_only  + loss_dice
             
             if use_isolating_loss:
                 loss_metric, mani_loss, nat_loss = isolating_loss_fn(mask_feat, masks)
